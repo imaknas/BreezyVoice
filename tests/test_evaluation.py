@@ -5,7 +5,7 @@ import pytest
 from breezyvoice.evaluation import signal
 from breezyvoice.evaluation.compare import compare
 from breezyvoice.evaluation.run import evaluate, load_sentences, measure_reference, summarize
-from breezyvoice.evaluation.text import character_error_rate, comparable, edit_distance, syllable_match
+from breezyvoice.evaluation.text import character_error_rate, comparable, edit_distance, marked_breaks, syllable_match
 
 RATE = 22050
 
@@ -95,6 +95,31 @@ def test_signal_checks():
     assert signal.tail_level_db(faded, RATE) < -20
 
 
+def _speech(*parts):
+    """Alternating sound and silence, by duration in seconds."""
+    rng = np.random.default_rng(0)
+    out = [(0.2 * rng.standard_normal(int(RATE * d)) if i % 2 == 0 else np.zeros(int(RATE * d)))
+           for i, d in enumerate(parts)]
+    return np.concatenate(out).astype(np.float32)
+
+
+def test_pauses_finds_long_gaps_inside_speech_only():
+    audio = np.concatenate([np.zeros(RATE // 2, dtype=np.float32), _speech(0.5, 0.4, 0.5, 0.1, 0.5),
+                            np.zeros(RATE // 2, dtype=np.float32)])
+    found = signal.pauses(audio, RATE)
+    assert len(found) == 1
+    assert found[0][0] == pytest.approx(1.0, abs=0.04) and found[0][1] == pytest.approx(1.4, abs=0.04)
+    assert signal.pauses(np.zeros(RATE, dtype=np.float32), RATE) == []
+
+
+@pytest.mark.parametrize("text, expected", [
+    ("下次名字卡住時試試。", 0), ("其實問題不在鬧鐘，而在你前一晚的習慣。", 1),
+    ("好了……我們走吧！", 1), ("第一，第二；第三。", 2), ("你覺得呢？", 0),
+])
+def test_marked_breaks(text, expected):
+    assert marked_breaks(text) == expected
+
+
 def test_mel_distance():
     rng = np.random.default_rng(0)
     a = (0.1 * rng.standard_normal(RATE)).astype(np.float32)
@@ -138,9 +163,11 @@ def test_evaluate_records_each_take_and_summary_counts_bad_ones():
     assert records[0]["cer"] == {"fake": 0} and records[1]["cer"]["fake"] == pytest.approx(1 / 6)
     assert records[0]["chars"] == 6 and records[0]["seconds"] == 2 and records[0]["wall_seconds"] == 1
     assert records[0]["similarity"] > records[1]["similarity"]
+    assert records[0]["pauses"] == [] and records[0]["unmarked_pauses"] == 0
 
     summary = summarize(records)
     assert summary["takes"] == 4
+    assert summary["takes_with_unmarked_pauses"] == 0
     assert summary["real_time_factor"] == pytest.approx(0.5)
     assert summary["bad_takes"] == {"fake": 2}
     assert summary["bad_takes_all_recognisers"] == 2

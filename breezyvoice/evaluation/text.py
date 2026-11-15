@@ -42,3 +42,16 @@ def syllable_match(reference: str, hypothesis: str, to_syllables: Callable[[str]
     the measure to gate on when deciding whether a take has to be redone.
     """
     return difflib.SequenceMatcher(None, to_syllables(reference), to_syllables(hypothesis), autojunk=False).ratio()
+
+
+_BREAKS = set("，、；：,;:—…。！？!?")
+
+
+def marked_breaks(text: str) -> int:
+    """How many places inside the text call for a pause: runs of punctuation, not counting the end."""
+    count, in_run = 0, False
+    for ch in text.strip().rstrip("".join(_BREAKS)):
+        if ch in _BREAKS and not in_run:
+            count += 1
+        in_run = ch in _BREAKS
+    return count

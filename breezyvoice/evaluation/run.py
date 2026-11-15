@@ -9,7 +9,7 @@ from typing import Callable, Mapping, Sequence
 import numpy as np
 
 from breezyvoice.evaluation import signal
-from breezyvoice.evaluation.text import character_error_rate, comparable, syllable_match
+from breezyvoice.evaluation.text import character_error_rate, comparable, marked_breaks, syllable_match
 
 # A take whose error rate is above this would be noticed by a listener (about two wrong characters
 # in a twenty-character sentence).
@@ -74,7 +74,11 @@ def evaluate(synthesize: Synthesize, sentences: Sequence[str], seeds: Sequence[i
                 "seconds_per_char": len(audio) / sample_rate / chars,
                 "clipped_fraction": signal.clipped_fraction(audio),
                 "tail_level_db": signal.tail_level_db(audio, sample_rate),
+                "pauses": signal.pauses(audio, sample_rate),
             }
+            # A pause where the text has no punctuation breaks a phrase apart. Without word timings
+            # the pauses cannot be placed, so only their surplus over the marked breaks is counted.
+            record["unmarked_pauses"] = max(0, len(record["pauses"]) - marked_breaks(sentence))
             records.append(record)
             worst = max(record["cer"].values())
             log(f"[{len(records)}/{len(sentences) * len(seeds)}] {name} {record['seconds']:.1f}s "
@@ -101,6 +105,7 @@ def summarize(records: Sequence[dict]) -> dict:
         "similarity_mean": statistics.fmean(sims),
         "similarity_min": min(sims),
         "seconds_per_char_median": statistics.median(r["seconds_per_char"] for r in records),
+        "takes_with_unmarked_pauses": sum(r["unmarked_pauses"] > 0 for r in records),
         "clipped_takes": sum(r["clipped_fraction"] > 0 for r in records),
         "loud_endings": sum(r["tail_level_db"] > -10 for r in records),
     }
