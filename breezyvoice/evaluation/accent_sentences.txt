@@ -1,0 +1,32 @@
+# Sentences for listening, not for scoring: each holds words whose standard reading in Taiwan differs
+# from the reading used in mainland China. A recogniser hears both as the same word, so a person has
+# to judge them. The Taiwan reading is given above each sentence (pinyin with tone numbers).
+#
+# 和 han4 · 垃圾 le4 se4
+我和弟弟一起把垃圾拿出去倒。
+# 企業 qi4 ye4 · 研究 yan2 jiu4
+這家企業每年投入很多經費做研究。
+# 星期 xing1 qi2 · 期待 qi2 dai4
+我很期待下個星期的旅行。
+# 液體 yi4 ti3 · 血液 xie3 yi4
+這瓶透明的液體是用來檢查血液的。
+# 頭髮 tou2 fa3 · 髮型 fa3 xing2
+她剪了頭髮，換了一個新的髮型。
+# 法國 fa4 guo2 · 俄羅斯 e4 luo2 si1 · 亞洲 ya3 zhou1
+他去過法國和俄羅斯，還沒有離開過亞洲。
+# 危險 wei2 xian3 · 懸崖 xuan2 yai2
+站在懸崖旁邊拍照非常危險。
+# 微波 wei2 bo1 · 包括 bao1 gua1
+這台機器的功能包括微波和燒烤。
+# 攻擊 gong1 ji2 · 暴露 pu4 lu4
+攻擊開始之前，他們的位置就已經暴露了。
+# 質量 zhi2 liang4 · 混淆 hun4 yao2
+很多人會把重量和質量這兩個觀念混淆。
+# 主角 zhu3 jiao3 · 角色 jiao3 se4 · 說服 shui4 fu2
+主角花了很久才說服那個角色加入。
+# 寂寞 ji2 mo4 · 成績 cheng2 ji1
+成績再好，一個人的時候還是會覺得寂寞。
+# 蝸牛 gua1 niu2 · 堤防 ti2 fang2
+下過雨之後，堤防上爬滿了蝸牛。
+# 熟悉 shou2 xi1 · 誰 shei2 · 綜合 zong4 he2
+誰最熟悉這個地方，就由誰來做綜合報告。

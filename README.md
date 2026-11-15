@@ -151,6 +151,54 @@ the smoke test), and only then restarts the launchd service and waits for `/heal
 client is in the middle of a job (`--force` overrides). The first run clones the checkout. The paths and the service
 label of a given machine go in `deploy.env`, which git ignores; the header of the script lists the settings.
 
+## Evaluation
+
+`breezyvoice evaluate` measures a build on fixed sentences and seeds, so two builds can be compared
+take by take. It needs extra packages and models (about 1.2 GB, downloaded once, pinned by checksum):
+
+```
+uv sync --group evaluation
+breezyvoice evaluate setup
+breezyvoice evaluate run --ref-wav REF.wav --ref-text "…" --out RUNS/base --label "what this is"
+breezyvoice evaluate compare RUNS/base RUNS/candidate
+```
+
+Keep `--out` outside the repository: it holds every take as a wav next to `result.json`.
+
+Per take it records the character error rate against two recognisers of different families
+(Paraformer and SenseVoice; neither is Whisper, which callers tend to gate on), the syllable match a
+narration pipeline would gate retakes on, speaker similarity to the reference (ERes2NetV2, a different
+architecture from the CAM++ encoder that conditions the model), seconds per character, clipping, the
+level of the last 100 ms, and wall time with the machine's load average. `run` also measures the
+reference recording itself, which gives the error-rate floor and a similarity ceiling for the instruments.
+
+Three sentence files ship with it (`--sentences`): `sentences.txt` (38 narration sentences, the
+default), `code_switch_sentences.txt` (Mandarin with English words; scored separately, recognisers are
+weaker on it) and `accent_sentences.txt` (words read differently in Taiwan; for listening only, a
+recogniser cannot tell the readings apart).
+
+What the instruments can and cannot see, from runs with the flow decoder deliberately degraded
+(76 takes, `data/example.wav` as reference):
+
+| run | CER (two recognisers) | similarity, paired change | mel distance to baseline | loud endings |
+|-----|-----------------------|---------------------------|--------------------------|--------------|
+| baseline (10 flow steps, guidance 0.7) | 0.083 / 0.073 | – | – | 13 |
+| 2 flow steps | 0.086 / 0.075 | −0.050 | 0.89 | 30 |
+| no guidance | 0.082 / 0.077 | −0.015 | 0.42 | 14 |
+
+- Error rate does not react to the acoustic stages: intelligibility is decided by the speech tokens.
+  Judge a change to the flow decoder or vocoder by the paired similarity change, the mel distance and
+  the endings, and by listening.
+- Unpaired comparisons are noisy: the two seeds of the baseline alone differ by 0.024 against 0.060 in
+  error rate and 0.876 against 0.855 in similarity. A change that alters the tokens needs many more
+  takes than one that does not.
+- Similarity is unreliable on takes under about two seconds (0.71–0.78 on four-character sentences).
+- The recognisers do not hear accent. Listen to `accent_sentences.txt`.
+
+Two findings about the model itself from the baseline: a 159-character sentence with commas only runs
+away into repetition until the length limit (keep sentences short; the engine splits at full stops
+only), and very short sentences occasionally come out as different words.
+
 ## Tests
 
 ```sh

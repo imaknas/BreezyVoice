@@ -1,0 +1,19 @@
+# Mandarin with English words dropped in, the way people in Taiwan's offices and studios talk.
+# Scored separately from sentences.txt: recognisers are weaker on mixed speech, so error rates here
+# are only comparable with other runs of this same file.
+我們下午要開一個meeting，討論這個project的schedule。
+這個deadline真的太趕了，我需要再confirm一下。
+你可以把那份report先email給我嗎？
+老闆說這個idea很好，但是budget不夠。
+我覺得這個design的concept很有feeling。
+先不要panic，我們還有plan B。
+這支影片的view很高，但是comment不多。
+他昨天present的時候，整個team都很impressed。
+麻煩你update一下這個檔案，然後share給大家。
+這個feature上線之後，user的feedback都很positive。
+我今天的mood不太好，想早一點下班去做yoga。
+這個case比較sensitive，我們私下再討論。
+你有follow那個YouTuber嗎？他的content真的很有料。
+這次的performance不如預期，我們要找出root cause。
+週末要不要一起去brunch，順便聊一下你的career？
+OK，那就先這樣，有問題再call我。

@@ -25,6 +25,8 @@ breezyvoice = "breezyvoice.cli:main"
 
 [dependency-groups]
 dev = ["pytest>=8"]
+# Objective checks of the synthesized speech (`breezyvoice evaluate`); not needed to synthesize.
+evaluation = ["sherpa-onnx>=2.0", "opencc-python-reimplemented>=0.1.7", "pypinyin>=0.55"]
 
 [build-system]
 requires = ["hatchling"]

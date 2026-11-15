@@ -1,4 +1,4 @@
-"""``breezyvoice`` command line: setup, synth, batch, serve."""
+"""``breezyvoice`` command line: setup, synth, batch, serve, evaluate."""
 from __future__ import annotations
 
 import argparse
@@ -139,8 +139,14 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--allow-remote", action="store_true")
     _model_args(p)
 
+    from breezyvoice.evaluation import cli as evaluation
+
+    evaluation.add_parser(sub, _model_args)
+
     args = parser.parse_args(argv)
-    return {"setup": cmd_setup, "synth": cmd_synth, "batch": cmd_batch, "serve": cmd_serve}[args.cmd](args)
+    commands = {"setup": cmd_setup, "synth": cmd_synth, "batch": cmd_batch, "serve": cmd_serve,
+                "evaluate": evaluation.main}
+    return commands[args.cmd](args)
 
 
 if __name__ == "__main__":
