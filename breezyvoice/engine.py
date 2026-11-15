@@ -49,7 +49,7 @@ def _len(t: torch.Tensor) -> torch.Tensor:
 
 
 class BreezyVoice:
-    """Holds the loaded networks. ``synthesize`` is serialised; call it from any thread."""
+    """Holds the loaded networks. Calls are serialised, so any thread may use it."""
 
     def __init__(self, networks: Networks, text_frontend: Callable[[str], str],
                  encode: Callable[[str], list[int]], speech_frontend: SpeechFrontend,
@@ -71,19 +71,20 @@ class BreezyVoice:
         """Reference features, cached by file identity and transcript."""
         stat = wav_path.stat()
         key = (str(wav_path.resolve()), stat.st_mtime_ns, stat.st_size, transcript)
-        if key in self._speakers:
-            self._speakers.move_to_end(key)
-            return self._speakers[key]
-        annotated = self._text(transcript)
-        speaker = Speaker(
-            transcript=annotated,
-            text_token=_ids(self._encode, annotated),
-            audio=self._speech.speaker_audio(load_wav_16k(wav_path)),
-        )
-        self._speakers[key] = speaker
-        while len(self._speakers) > self._cache_size:
-            self._speakers.popitem(last=False)
-        return speaker
+        with self._lock:
+            if key in self._speakers:
+                self._speakers.move_to_end(key)
+                return self._speakers[key]
+            annotated = self._text(transcript)
+            speaker = Speaker(
+                transcript=annotated,
+                text_token=_ids(self._encode, annotated),
+                audio=self._speech.speaker_audio(load_wav_16k(wav_path)),
+            )
+            self._speakers[key] = speaker
+            while len(self._speakers) > self._cache_size:
+                self._speakers.popitem(last=False)
+            return speaker
 
     def synthesize(self, text: str, speaker: Speaker, seed: int) -> Synthesis:
         annotated = self._text(text)
@@ -91,7 +92,7 @@ class BreezyVoice:
         if not sentences:
             raise ValueError("nothing to synthesize after normalisation")
         with self._lock, torch.inference_mode():
-            torch.manual_seed(seed)
+            torch.manual_seed(seed)  # all sampling draws from the CPU generator (see cosyvoice/llm, flow, hifigan)
             pieces = [self._sentence(s, speaker) for s in sentences]
         audio = torch.cat(pieces, dim=1).squeeze(0).numpy().astype(np.float32)
         return Synthesis(audio=audio, sample_rate=SAMPLE_RATE, text=annotated)

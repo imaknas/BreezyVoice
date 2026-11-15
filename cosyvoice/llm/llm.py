@@ -138,8 +138,9 @@ class TransformerLM(torch.nn.Module):
     ):
         while True:
             prob, indices = weighted_scores.softmax(dim=-1).topk(sampling)
-            top_ids = prob.multinomial(beam_size, replacement=True)
-            top_ids = indices[top_ids]
+            # Sample on CPU so a seed gives the same take on every device.
+            top_ids = prob.cpu().multinomial(beam_size, replacement=True)
+            top_ids = indices[top_ids.to(indices.device)]
             if (not ignore_eos) or (self.speech_token_size not in top_ids):
                 break
         return top_ids

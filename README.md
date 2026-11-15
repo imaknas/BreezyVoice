@@ -101,16 +101,18 @@ result = tts.synthesize("今天天氣真好。", speaker, seed=0)          # res
 
 ## Speed (Mac mini M4 Pro)
 
-Per sentence of about 5 s of audio, model already loaded, with other jobs running on the machine:
+Six short narration sentences (7–21 characters, 29 s of audio in total), model already loaded, one
+process:
 
-| placement | LLM | flow | vocoder | total |
-|-----------|-----|------|---------|-------|
-| MPS (default) | 6.2 s | 2.2 s | 0.1 s | ~8.5 s |
-| CPU | 5–11 s | 5.6 s | 0.2 s | 11–17 s |
+| device | per sentence | real-time factor | machine load avg |
+|--------|--------------|------------------|------------------|
+| MPS (default) | 8.6 s (5.3–11.2) | 1.78 | 2.7 |
+| CPU | 11.3 s | 2.35 | 6.8 |
 
-Timings roughly double when the machine is busy (load average ~30). Upstream on the same machine
-took 35 s for a 3.4 s sentence (single-threaded). The autoregressive LLM dominates; its key/value
-cache concatenation is the next thing to optimise.
+Loading takes ~3 s; preparing a new reference voice ~0.4 s (then cached). Times roughly double when
+the machine is busy (load average ~30), CPU more than MPS. Upstream on the same machine took 35 s for
+a 3.4 s sentence. Most of the time is the autoregressive LLM (~6 s of a 5 s sentence on MPS, flow
+~2 s, vocoder 0.1 s); its key/value cache concatenation is the next thing to optimise.
 
 ## Text normalisation
 
@@ -156,12 +158,17 @@ the audio is finite, not silent, of plausible length, and identical for the same
   manual `[:注音]` annotation (`真好[:ㄏㄠ3]` became `真[:ㄏㄠ3]`); fixed.
 - **Speed:** no forced single thread; reference-audio features are cached per speaker; the
   relative-position projection is reused across decoding steps (bit-identical output on CPU).
-- **Seeding:** each request seeds torch's generator before synthesis, so a seed reproduces a take.
+- **Seeding:** each request seeds torch before synthesis, and all sampling (LLM top-k, flow noise,
+  vocoder noise) draws from the CPU generator, so a seed gives the same take on CPU and MPS, and the
+  same take as upstream on CPU.
 - Whisper auto-transcription of the reference was dropped: `ref_text` is required.
 
-Verified against upstream (torch 2.3.1) on `data/example.wav`: text annotations and token ids are
-identical, prompt speech tokens identical, mel features within 0.006; the speaker embedding differs
-slightly (cosine 0.9988) because newer onnxruntime computes the CAM++ network a little differently.
+Verified against upstream (torch 2.3.1, CPU) on `data/example.wav` with the same inputs and seed:
+text annotations, text token ids, prompt speech tokens and the generated speech tokens are identical
+on both CPU and MPS; the flow mel matches within 2e-5 and the vocoder output within 1.4e-4
+(correlation > 0.99999). Reference features: mel within 0.006; the speaker embedding differs slightly
+(cosine 0.9988) because newer onnxruntime computes the CAM++ network a little differently.
+48 kHz stereo references load identically to upstream (within 1.2e-7).
 
 ## Licence
 

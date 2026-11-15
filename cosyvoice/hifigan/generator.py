@@ -157,7 +157,7 @@ class SineGen(torch.nn.Module):
         #        std = self.sine_amp/3 -> max value ~ self.sine_amp
         # .       for voiced regions is self.noise_std
         noise_amp = uv * self.noise_std + (1 - uv) * self.sine_amp / 3
-        noise = noise_amp * torch.randn_like(sine_waves)
+        noise = noise_amp * torch.randn(sine_waves.shape, dtype=sine_waves.dtype).to(sine_waves.device)  # CPU generator: same take on every device
 
         # first: set the unvoiced part to 0 by uv
         # then: additive noise
@@ -213,7 +213,7 @@ class SourceModuleHnNSF(torch.nn.Module):
         sine_merge = self.l_tanh(self.l_linear(sine_wavs))
 
         # source for noise branch, in the same shape as uv
-        noise = torch.randn_like(uv) * self.sine_amp / 3
+        noise = torch.randn(uv.shape, dtype=uv.dtype).to(uv.device) * self.sine_amp / 3  # CPU generator: same take on every device
         return sine_merge, noise, uv
 
 
