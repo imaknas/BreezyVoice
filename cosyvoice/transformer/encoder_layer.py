@@ -105,6 +105,23 @@ class TransformerEncoderLayer(nn.Module):
         fake_cnn_cache = torch.zeros((0, 0, 0), dtype=x.dtype, device=x.device)
         return x, mask, new_att_cache, fake_cnn_cache
 
+    def forward_step(self, x: torch.Tensor, pos_emb: torch.Tensor, kv) -> torch.Tensor:
+        """``forward`` for one new position (1, 1, size) attending over ``kv``, extended in place."""
+        residual = x
+        if self.normalize_before:
+            x = self.norm1(x)
+        x = residual + self.dropout(self.self_attn.forward_step(x, pos_emb, kv))
+        if not self.normalize_before:
+            x = self.norm1(x)
+
+        residual = x
+        if self.normalize_before:
+            x = self.norm2(x)
+        x = residual + self.dropout(self.feed_forward(x))
+        if not self.normalize_before:
+            x = self.norm2(x)
+        return x
+
 
 class ConformerEncoderLayer(nn.Module):
     """Encoder layer module.

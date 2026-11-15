@@ -191,17 +191,13 @@ class TransformerLM(torch.nn.Module):
 
         # 5. step by step decode
         out_tokens = []
-        offset = 0
-        att_cache, cnn_cache = torch.zeros((0, 0, 0, 0), device=lm_input.device), torch.zeros((0, 0, 0, 0), device=lm_input.device)
+        y_pred, caches = self.llm.decode_prefill(lm_input, capacity=lm_input.size(1) + max_len)
         for i in range(max_len):
-            y_pred, att_cache, cnn_cache = self.llm.forward_chunk(lm_input, offset=0, required_cache_size=-1, att_cache=att_cache, cnn_cache=cnn_cache,
-                                                                  att_mask=torch.tril(torch.ones((1, lm_input.shape[1], lm_input.shape[1]), device=lm_input.device)).to(torch.bool))
             logp = self.llm_decoder(y_pred[:, -1]).log_softmax(dim=-1)
             top_ids = self.sampling_ids(logp.squeeze(dim=0), sampling, beam_size, ignore_eos=True if i < min_len else False).item()
             if top_ids == self.speech_token_size:
                 break
             out_tokens.append(top_ids)
-            offset += lm_input.size(1)
-            lm_input = self.speech_embedding.weight[top_ids].reshape(1, 1, -1)
+            y_pred = self.llm.decode_step(self.speech_embedding.weight[top_ids].reshape(1, 1, -1), caches)
 
         return torch.tensor([out_tokens], dtype=torch.int64, device=device)

@@ -22,6 +22,8 @@ from typing import Tuple
 import torch
 from torch import nn
 
+from cosyvoice.transformer.kv_cache import LayerKV
+
 
 class MultiHeadedAttention(nn.Module):
     """Multi-Head Attention layer.
@@ -350,3 +352,27 @@ class RelPositionMultiHeadedAttention(MultiHeadedAttention):
             self.d_k)  # (batch, head, time1, time2)
 
         return self.forward_attention(v, scores, mask), new_cache
+
+    def forward_step(self, x: torch.Tensor, pos_emb: torch.Tensor, kv: LayerKV) -> torch.Tensor:
+        """Self-attention of one new position over everything in ``kv``, which it extends in place.
+
+        Args:
+            x (torch.Tensor): the new position (1, 1, size).
+            pos_emb (torch.Tensor): encodings of the relative positions time2-1 ... 0, i.e. the first
+                time2 rows of the 2*time2-1 table ``forward`` takes (1, time2, size), where time2
+                counts the new position. With a single query ``rel_shift`` keeps exactly those
+                columns, so the other half never has to be multiplied.
+        Returns:
+            torch.Tensor: (1, 1, size)
+        """
+        q, k, v = self.forward_qkv(x, x, x)
+        kv.append(k, v)
+        k, v = kv.keys, kv.values
+        q = q.transpose(1, 2)  # (1, 1, head, d_k)
+        p = self._project_pos(pos_emb).view(1, -1, self.h, self.d_k).transpose(1, 2)  # (1, head, time2, d_k)
+        q_with_bias_u = (q + self.pos_bias_u).transpose(1, 2)
+        q_with_bias_v = (q + self.pos_bias_v).transpose(1, 2)
+        matrix_ac = torch.matmul(q_with_bias_u, k.transpose(-2, -1))
+        matrix_bd = torch.matmul(q_with_bias_v, p.transpose(-2, -1))
+        scores = (matrix_ac + matrix_bd) / math.sqrt(self.d_k)  # (1, head, 1, time2)
+        return self.forward_attention(v, scores)

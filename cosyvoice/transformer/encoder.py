@@ -15,7 +15,7 @@
 # limitations under the License.
 # Modified from ESPnet(https://github.com/espnet/espnet)
 """Encoder definition."""
-from typing import Tuple
+from typing import List, Tuple
 
 import torch
 import torch.utils.checkpoint as ckpt
@@ -23,6 +23,7 @@ import torch.utils.checkpoint as ckpt
 from cosyvoice.transformer.convolution import ConvolutionModule
 from cosyvoice.transformer.encoder_layer import TransformerEncoderLayer
 from cosyvoice.transformer.encoder_layer import ConformerEncoderLayer
+from cosyvoice.transformer.kv_cache import LayerKV
 from cosyvoice.transformer.positionwise_feed_forward import PositionwiseFeedForward
 from cosyvoice.utils.class_utils import (
     COSYVOICE_EMB_CLASSES,
@@ -269,6 +270,51 @@ class BaseEncoder(torch.nn.Module):
         r_cnn_cache = torch.cat(r_cnn_cache, dim=0)
 
         return (xs, r_att_cache, r_cnn_cache)
+
+    def decode_prefill(self, xs: torch.Tensor, capacity: int) -> Tuple[torch.Tensor, List[LayerKV]]:
+        """Run a causal prefix and return its output with per-layer caches sized for ``capacity`` positions.
+
+        Args:
+            xs (torch.Tensor): prefix (1, time, input-dim).
+            capacity (int): the most positions the sequence can reach, prefix included.
+        """
+        time = xs.size(1)
+        self._check_decode_length(max(capacity, time))
+        causal = torch.tril(torch.ones((1, time, time), device=xs.device)).to(torch.bool)
+        empty = torch.zeros((0, 0, 0, 0), device=xs.device)
+        ys, att_cache, _ = self.forward_chunk(xs, offset=0, required_cache_size=-1,
+                                              att_cache=empty, cnn_cache=empty, att_mask=causal)
+        caches = []
+        for packed in att_cache:  # (head, time, d_k * 2)
+            k, v = torch.split(packed.unsqueeze(0), packed.size(-1) // 2, dim=-1)
+            kv = LayerKV(k.size(1), k.size(3), max(capacity, time), k.device, k.dtype)
+            kv.append(k, v)
+            caches.append(kv)
+        return ys, caches
+
+    def decode_step(self, xs: torch.Tensor, caches: List[LayerKV]) -> torch.Tensor:
+        """Run one new position (1, 1, input-dim) after everything in ``caches``, extended in place."""
+        assert xs.size(0) == 1 and xs.size(1) == 1
+        masks = torch.ones((1, 1, 1), device=xs.device, dtype=torch.bool)
+        if self.global_cmvn is not None:
+            xs = self.global_cmvn(xs)
+        xs, _, _ = self.embed(xs, masks, 0)
+        time = caches[0].length + 1
+        self._check_decode_length(time)
+        # Relative positions time-1 ... 0: the half of the table a single query uses.
+        pos_emb = self.embed.position_encoding(offset=0, size=time)[:, :time]
+        for layer, kv in zip(self.encoders, caches):
+            xs = layer.forward_step(xs, pos_emb, kv)
+        if self.normalize_before:
+            xs = self.after_norm(xs)
+        return xs
+
+    def _check_decode_length(self, time: int) -> None:
+        # The positional table is sliced around its centre; past its half-length the slice would
+        # silently come back short.
+        limit = self.embed.pos_enc.pe.size(1) // 2 + 1
+        if time > limit:
+            raise ValueError(f"sequence of {time} positions exceeds the positional table ({limit})")
 
     def forward_chunk_by_chunk(
         self,
