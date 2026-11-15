@@ -2,6 +2,7 @@
 import numpy as np
 import pytest
 
+from breezyvoice.audio import pauses
 from breezyvoice.evaluation import signal
 from breezyvoice.evaluation.compare import compare
 from breezyvoice.evaluation.run import evaluate, load_sentences, measure_reference, summarize
@@ -106,10 +107,10 @@ def _speech(*parts):
 def test_pauses_finds_long_gaps_inside_speech_only():
     audio = np.concatenate([np.zeros(RATE // 2, dtype=np.float32), _speech(0.5, 0.4, 0.5, 0.1, 0.5),
                             np.zeros(RATE // 2, dtype=np.float32)])
-    found = signal.pauses(audio, RATE)
+    found = pauses(audio, RATE)
     assert len(found) == 1
     assert found[0][0] == pytest.approx(1.0, abs=0.04) and found[0][1] == pytest.approx(1.4, abs=0.04)
-    assert signal.pauses(np.zeros(RATE, dtype=np.float32), RATE) == []
+    assert pauses(np.zeros(RATE, dtype=np.float32), RATE) == []
 
 
 @pytest.mark.parametrize("text, expected", [

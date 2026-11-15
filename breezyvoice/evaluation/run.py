@@ -8,6 +8,7 @@ from typing import Callable, Mapping, Sequence
 
 import numpy as np
 
+from breezyvoice.audio import pauses
 from breezyvoice.evaluation import signal
 from breezyvoice.evaluation.text import character_error_rate, comparable, marked_breaks, syllable_match
 
@@ -74,7 +75,7 @@ def evaluate(synthesize: Synthesize, sentences: Sequence[str], seeds: Sequence[i
                 "seconds_per_char": len(audio) / sample_rate / chars,
                 "clipped_fraction": signal.clipped_fraction(audio),
                 "tail_level_db": signal.tail_level_db(audio, sample_rate),
-                "pauses": signal.pauses(audio, sample_rate),
+                "pauses": pauses(audio, sample_rate),
             }
             # A pause where the text has no punctuation breaks a phrase apart. Without word timings
             # the pauses cannot be placed, so only their surplus over the marked breaks is counted.

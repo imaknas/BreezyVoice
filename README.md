@@ -44,10 +44,13 @@ Use absolute paths: they are resolved by the process doing the synthesis. A succ
 
 ```json
 {"ok": true, "out": "/abs/out.wav", "duration_s": 4.92, "sample_rate": 22050, "seed": 1,
- "text": "第一，你在監控情緒，大腦會放大不開心。", "elapsed_s": 8.5}
+ "text": "第一，你在監控情緒，大腦會放大不開心。", "pauses": [[1.02, 1.34], [2.7, 3.0]], "elapsed_s": 8.5}
 ```
 
 `text` in the result is what the model actually read, after normalisation and 注音 annotation.
+`pauses` lists the silent stretches of 0.25 s or more inside the speech as `[start, end]` in seconds
+(not the silence before the first or after the last sound), so a caller can reject a take that
+pauses where the text has no punctuation.
 Failures come back as `{"ok": false, "error": "...", "kind": "bad_request" | "synthesis_failed"}`.
 
 Text containing several sentences is split on `。？！.?!` and the pieces are concatenated,

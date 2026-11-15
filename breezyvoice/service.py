@@ -9,6 +9,7 @@ from pathlib import Path
 
 import soundfile
 
+from breezyvoice.audio import pauses
 from breezyvoice.engine import BreezyVoice, Synthesis
 
 
@@ -71,6 +72,9 @@ def handle(engine: BreezyVoice, payload: object) -> dict:
             "sample_rate": result.sample_rate,
             "seed": req.seed,
             "text": result.text,
+            # Silent stretches inside the speech, [start, end] in seconds: a caller that knows where
+            # the words fall can tell a pause at a comma from one that splits a phrase.
+            "pauses": [[round(a, 2), round(b, 2)] for a, b in pauses(result.audio, result.sample_rate)],
             "elapsed_s": round(time.monotonic() - start, 3),
         }
     except BadRequest as e:

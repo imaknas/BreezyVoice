@@ -45,6 +45,7 @@ def test_synthesize_one_sentence(engine, tmp_path):
     out = tmp_path / "out.wav"
     result = handle(engine, {"text": TEXT, "ref_wav": str(REF_WAV), "ref_text": REF_TEXT, "seed": 7, "out": str(out)})
     assert result["ok"], result
+    assert all(0 < a < b < result["duration_s"] and b - a >= 0.25 for a, b in result["pauses"])
     audio, sr = soundfile.read(out, dtype="float32")
     assert sr == engine.sample_rate == 22050
     _check_speech(audio, sr, n_chars=16)
