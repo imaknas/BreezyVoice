@@ -110,7 +110,7 @@ def cmd_serve(args) -> int:
 
 def _model_args(p: argparse.ArgumentParser) -> None:
     p.add_argument("--device", choices=("auto", "cpu", "mps"), default="auto",
-                   help="auto = MPS when available, else CPU")
+                   help="auto = LLM on CPU with flow decoder and vocoder on MPS when available, else all CPU")
     p.add_argument("--weights-dir", type=Path, default=None,
                    help="use BreezyVoice weights from this directory instead of the Hugging Face cache")
     p.add_argument("--threads", type=int, default=None, help="CPU threads for torch / onnxruntime")

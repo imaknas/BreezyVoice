@@ -17,9 +17,17 @@ DEVICES = ("cpu", "mps", "auto")
 
 
 def placement_for(device: str) -> Placement:
-    """``auto`` = MPS when available (about 2x faster than CPU on an M4 Pro, see README), else CPU."""
+    """``auto`` puts each network where it is fastest: on Apple Silicon the LLM on CPU and the flow
+    decoder and vocoder on MPS (see README for timings); without MPS, everything on CPU.
+
+    The LLM decodes one position at a time, which is bound by reading its weights and by per-operator
+    overhead, where the GPU has no edge; the flow decoder's wide convolutions and attention do gain.
+    """
     if device == "auto":
-        device = "mps" if torch.backends.mps.is_available() else "cpu"
+        if not torch.backends.mps.is_available():
+            device = "cpu"
+        else:
+            return Placement(llm=torch.device("cpu"), flow=torch.device("mps"), hift=torch.device("mps"))
     if device == "mps" and not torch.backends.mps.is_available():
         raise RuntimeError("MPS requested but not available")
     d = torch.device(device)

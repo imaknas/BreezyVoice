@@ -85,7 +85,7 @@ uv run breezyvoice synth --text "今天天氣真好。" --ref-wav data/example.w
 
 Loads the model on every call (~3 s); use `batch` or `serve` for more than a few sentences.
 
-Common options: `--device auto|cpu|mps` (auto = MPS when available), `--threads N`,
+Common options: `--device auto|cpu|mps` (auto = LLM on CPU, flow decoder and vocoder on MPS when available), `--threads N`,
 `--weights-dir DIR` (weights from a plain directory instead of the Hugging Face cache).
 
 ### Python
@@ -106,13 +106,18 @@ process:
 
 | device | per sentence | real-time factor | machine load avg |
 |--------|--------------|------------------|------------------|
-| MPS (default) | 8.6 s (5.3–11.2) | 1.78 | 2.7 |
+| MPS | 8.6 s (5.3–11.2) | 1.78 | 2.7 |
 | CPU | 11.3 s | 2.35 | 6.8 |
+
+Those figures predate the in-place key/value cache. With it, on three longer sentences (23 s of
+audio) and a moderately busy machine (load average ~6), the same benchmark went from RTF 1.78 to
+1.54 on MPS and from 2.07 to 1.71 on CPU, and the default placement (`auto`: LLM on CPU, flow
+decoder and vocoder on MPS) reached 1.27. An LLM decode step on CPU fell from ~23 ms to ~13 ms.
 
 Loading takes ~3 s; preparing a new reference voice ~0.4 s (then cached). Times roughly double when
 the machine is busy (load average ~30), CPU more than MPS. Upstream on the same machine took 35 s for
-a 3.4 s sentence. Most of the time is the autoregressive LLM (~6 s of a 5 s sentence on MPS, flow
-~2 s, vocoder 0.1 s); its key/value cache concatenation is the next thing to optimise.
+a 3.4 s sentence. Most of the time is still the autoregressive LLM; the cost of a step grows with
+the length of the reference clip, which sits in its attention cache.
 
 ## Text normalisation
 
