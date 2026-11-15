@@ -39,16 +39,17 @@ Every mode takes the same request and writes a 22.05 kHz mono 16-bit wav:
 | `ref_text` | string | exact transcript of `ref_wav`                                   |
 | `seed`     | int    | sampling seed, default 0; same seed + same inputs → same audio  |
 | `out`      | path   | where to write the `.wav` (parent directories are created)      |
+| `min_pause_s` | float | shortest silence reported in `pauses`, default 0.25 (optional) |
 
 Use absolute paths: they are resolved by the process doing the synthesis. A successful result:
 
 ```json
 {"ok": true, "out": "/abs/out.wav", "duration_s": 4.92, "sample_rate": 22050, "seed": 1,
- "text": "第一，你在監控情緒，大腦會放大不開心。", "pauses": [[1.02, 1.34], [2.7, 3.0]], "elapsed_s": 8.5}
+ "text": "第一，你在監控情緒，大腦會放大不開心。", "pauses": [[1.02, 1.34], [2.7, 3.0]], "min_pause_s": 0.25, "elapsed_s": 8.5}
 ```
 
 `text` in the result is what the model actually read, after normalisation and 注音 annotation.
-`pauses` lists the silent stretches of 0.25 s or more inside the speech as `[start, end]` in seconds
+`pauses` lists the silent stretches of `min_pause_s` or more inside the speech as `[start, end]` in seconds
 (not the silence before the first or after the last sound), so a caller can reject a take that
 pauses where the text has no punctuation.
 Failures come back as `{"ok": false, "error": "...", "kind": "bad_request" | "synthesis_failed"}`.

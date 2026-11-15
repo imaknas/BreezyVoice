@@ -13,6 +13,11 @@ from breezyvoice.audio import pauses
 from breezyvoice.engine import BreezyVoice, Synthesis
 
 
+DEFAULT_MIN_PAUSE_S = 0.25
+# Stop consonants close the mouth for up to about a tenth of a second; anything shorter is not a pause.
+SHORTEST_PAUSE_S = 0.05
+
+
 class BadRequest(ValueError):
     pass
 
@@ -24,6 +29,7 @@ class Request:
     ref_text: str
     seed: int
     out: Path
+    min_pause_s: float
 
     @classmethod
     def from_json(cls, obj: object) -> "Request":
@@ -35,13 +41,18 @@ class Request:
         seed = obj.get("seed", 0)
         if not isinstance(seed, int) or isinstance(seed, bool) or not 0 <= seed < 2**63:
             raise BadRequest("seed must be a non-negative integer")
+        min_pause_s = obj.get("min_pause_s", DEFAULT_MIN_PAUSE_S)
+        if isinstance(min_pause_s, bool) or not isinstance(min_pause_s, (int, float)) \
+                or not SHORTEST_PAUSE_S <= min_pause_s <= 10:
+            raise BadRequest(f"min_pause_s must be a number of seconds between {SHORTEST_PAUSE_S} and 10")
         ref_wav = Path(obj["ref_wav"]).expanduser()
         if not ref_wav.is_file():
             raise BadRequest(f"ref_wav not found: {ref_wav}")
         out = Path(obj["out"]).expanduser()
         if out.suffix.lower() != ".wav":
             raise BadRequest("out must end in .wav")
-        return cls(text=str(obj["text"]), ref_wav=ref_wav, ref_text=str(obj["ref_text"]), seed=seed, out=out)
+        return cls(text=str(obj["text"]), ref_wav=ref_wav, ref_text=str(obj["ref_text"]), seed=seed, out=out,
+                   min_pause_s=float(min_pause_s))
 
 
 def write_wav(path: Path, result: Synthesis) -> None:
@@ -74,7 +85,9 @@ def handle(engine: BreezyVoice, payload: object) -> dict:
             "text": result.text,
             # Silent stretches inside the speech, [start, end] in seconds: a caller that knows where
             # the words fall can tell a pause at a comma from one that splits a phrase.
-            "pauses": [[round(a, 2), round(b, 2)] for a, b in pauses(result.audio, result.sample_rate)],
+            "pauses": [[round(a, 2), round(b, 2)]
+                       for a, b in pauses(result.audio, result.sample_rate, min_seconds=req.min_pause_s)],
+            "min_pause_s": req.min_pause_s,
             "elapsed_s": round(time.monotonic() - start, 3),
         }
     except BadRequest as e:
