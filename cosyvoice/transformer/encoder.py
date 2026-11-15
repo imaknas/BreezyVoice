@@ -309,12 +309,17 @@ class BaseEncoder(torch.nn.Module):
             xs = self.after_norm(xs)
         return xs
 
+    def max_decode_length(self) -> int:
+        """The longest sequence ``decode_prefill`` and ``decode_step`` can reach.
+
+        The positional table is sliced around its centre; past its half-length the slice would
+        silently come back short.
+        """
+        return self.embed.pos_enc.pe.size(1) // 2 + 1
+
     def _check_decode_length(self, time: int) -> None:
-        # The positional table is sliced around its centre; past its half-length the slice would
-        # silently come back short.
-        limit = self.embed.pos_enc.pe.size(1) // 2 + 1
-        if time > limit:
-            raise ValueError(f"sequence of {time} positions exceeds the positional table ({limit})")
+        if time > self.max_decode_length():
+            raise ValueError(f"sequence of {time} positions exceeds the positional table ({self.max_decode_length()})")
 
     def forward_chunk_by_chunk(
         self,

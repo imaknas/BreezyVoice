@@ -191,6 +191,9 @@ class TransformerLM(torch.nn.Module):
 
         # 5. step by step decode
         out_tokens = []
+        # The length bound is a multiple of the text length and far above where the end token
+        # appears; do not let it ask for more positions than the decoder can address.
+        max_len = min(max_len, self.llm.max_decode_length() - lm_input.size(1))
         y_pred, caches = self.llm.decode_prefill(lm_input, capacity=lm_input.size(1) + max_len)
         for i in range(max_len):
             logp = self.llm_decoder(y_pred[:, -1]).log_softmax(dim=-1)

@@ -64,7 +64,7 @@ def test_decode_step_beyond_capacity_fails():
 
 def test_decode_longer_than_positional_table_fails():
     enc = _encoder()
-    limit = enc.embed.pos_enc.pe.size(1) // 2 + 1
+    limit = enc.max_decode_length()
     with torch.inference_mode(), pytest.raises(ValueError, match="positional table"):
         enc.decode_prefill(torch.randn(1, 4, 32), capacity=limit + 1)
 
@@ -132,3 +132,36 @@ def test_seed_gives_the_same_tokens_on_cpu_and_mps(llm, seed):
     cpu = _sample(llm, "cpu", seed)
     assert len(cpu) >= 36
     assert _sample(llm, "mps", seed) == cpu
+
+
+@pytest.mark.slow
+def test_long_text_is_not_refused_for_its_length_bound(llm):
+    """The bound on output length (30x the text) may exceed what the decoder can address; the text itself fits."""
+    llm.to("cpu")
+    g = torch.Generator().manual_seed(0)
+    text = torch.randint(0, 50000, (1, 200), generator=g, dtype=torch.int32)
+    prompt_speech = torch.randint(0, llm.speech_token_size, (1, 740), generator=g, dtype=torch.int32)
+    prompt_text = torch.randint(0, 50000, (1, 60), generator=g, dtype=torch.int32)
+
+    calls = []
+    original = llm.llm.decode_step
+
+    def stop_early(xs, caches):
+        calls.append(caches[0].capacity)
+        if len(calls) >= 3:
+            raise StopIteration
+        return original(xs, caches)
+
+    llm.llm.decode_step = stop_early
+    try:
+        with pytest.raises(StopIteration):
+            llm.inference(
+                text=text, text_len=torch.tensor([200], dtype=torch.int32),
+                prompt_text=prompt_text, prompt_text_len=torch.tensor([60], dtype=torch.int32),
+                prompt_speech_token=prompt_speech, prompt_speech_token_len=torch.tensor([740], dtype=torch.int32),
+                embedding=torch.randn(1, 192, generator=g), sampling=25,
+                max_token_text_ratio=30, min_token_text_ratio=3,
+            )
+    finally:
+        del llm.llm.decode_step
+    assert calls[0] == llm.llm.max_decode_length()
