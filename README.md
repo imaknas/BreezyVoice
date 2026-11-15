@@ -1,171 +1,172 @@
-# BreezyVoice
+# BreezyVoice (maintained fork)
 
-BreezyVoice is a voice-cloning text-to-speech system specifically adapted for Taiwanese Mandarin, highlighting phonetic control abilities via auxiliary 注音 (bopomofo) inputs. BreezyVoice is partially derived from [CosyVoice](https://github.com/FunAudioLLM/CosyVoice). BreezyVoice is part of the [Breeze2 family](https://huggingface.co/collections/MediaTek-Research/breeze2-family-67863158443a06a72dd29900)
+Voice-cloning text-to-speech for **Taiwanese Mandarin**, packaged to run offline on CPU or Apple
+Silicon (MPS). This is a maintained fork of MediaTek Research's
+[BreezyVoice](https://github.com/mtkresearch/BreezyVoice) (Apache 2.0), whose upstream has been
+inactive since June 2025 and targets Python 3.10, torch 2.3 and Linux + CUDA. The model itself is
+unchanged: [MediaTek-Research/BreezyVoice-300M](https://huggingface.co/MediaTek-Research/BreezyVoice-300M)
+(Apache 2.0), partially derived from [CosyVoice](https://github.com/FunAudioLLM/CosyVoice).
+Paper: [arXiv:2501.17790](https://arxiv.org/abs/2501.17790).
 
-<img src="https://raw.githubusercontent.com/mtkresearch/BreezyVoice/main/images/flowchart.png" alt="flowchart" width="700"/>
+Given a short reference recording of a voice and its transcript, it reads new Traditional Chinese
+text in that voice. Polyphonic and rare characters get 注音 hints from
+[g2pW](https://github.com/GitYCC/g2pW); you can also force a reading inline: `今天天氣真好[:ㄏㄠ3]`.
 
-🚀 **Try out our interactive [UI playground](https://huggingface.co/spaces/Splend1dchan/BreezyVoice-Playground) now!** 🚀 
+## Setup
 
-🚀 **[立即體驗 BreezyVoice 語音合成](https://huggingface.co/spaces/Splend1dchan/BreezyVoice-Playground) !** 🚀 
+Requires [uv](https://docs.astral.sh/uv/). Python 3.14 is used by default (`.python-version`); 3.13 also works.
 
-Or visit one of these resources:  
-- [Playground (CLI Inference)](https://www.kaggle.com/code/a24998667/breezyvoice-playground)  
-- [Model](https://huggingface.co/MediaTek-Research/BreezyVoice/tree/main)  
-- [Paper](https://arxiv.org/abs/2501.17790) 
-
-
-Repo Main Contributors: Chia-Chun Lin, Chan-Jan Hsu
-
-## Features
-🔥 BreezyVoice outperforms competing commercial services in terms of naturalness.
-
-
-
-<img src="https://raw.githubusercontent.com/mtkresearch/BreezyVoice/main/images/comparisons.png" alt="comparisons" width="350"/>
-
- 🔥 BreezyVoice is highly competitive at code-switching scenarios.
-
-| Code-Switching Term Category        | **BreezyVoice**  | Z | Y | U | M |
-|-------------|--------------|---|---|---|---|
-| **General Words** | **8**            | 5 | **8** | **8** | 7 |
-| **Entities**| **9**         | 6 | 4 | 7 | 4 |
-| **Abbreviations**   | **9**            | 8 | 6 | 6 | 7 |
-| **Toponyms**| 3            | 3 | **7** | 3 | 4 |
-| **Full Sentences**| 7           | 7 | **8** | 5 | 3 |
-
-🔥 BreezyVoice supports automatic 注音 annotation, as well as manual 注音 correction (See Inference).
-
-
-## Install
-
-**Clone and install**
-
-- Clone the repo
-``` sh
-git clone https://github.com/mtkresearch/BreezyVoice.git
-# If you failed to clone submodule due to network failures, please run following command until success
-cd BreezyVoice
+```sh
+git clone https://github.com/imaknas/BreezyVoice.git breezyvoice
+cd breezyvoice
+uv sync
+uv run breezyvoice setup      # the only step that uses the network
 ```
 
-- Install Requirements (requires Python3.10)
-```
-pip uninstall onnxruntime # use onnxruntime-gpu instead of onnxruntime
-pip install -r requirements.txt
-```
-(The model is runnable on CPU, please change onnxruntime-gpu to onnxruntime in `requirements.txt` if you do not have GPU in your environment)
+`setup` downloads, at pinned commit hashes, the BreezyVoice weights (five files) and the
+`bert-base-chinese` vocabulary into the Hugging Face cache, and the g2pW model (checksum-verified)
+into `$BREEZYVOICE_HOME` (default `~/.cache/breezyvoice`). After that, loading and synthesis make
+no network calls at all (verified with networking denied by the macOS sandbox).
 
-You might need to install cudnn depending on cuda version
-```
-sudo apt-get -y install cudnn9-cuda-11
-```
-## Inference
+## Interface
 
-UTF8 encoding is required:
+Every mode takes the same request and writes a 22.05 kHz mono 16-bit wav:
 
-``` sh
-export PYTHONUTF8=1
-```
----
-**Run single_inference.py with the following arguments:**
+| field      | type   | meaning                                                         |
+|------------|--------|-----------------------------------------------------------------|
+| `text`     | string | the sentence or chunk to speak                                  |
+| `ref_wav`  | path   | reference recording of the voice (any sample rate; ~5–15 s works well) |
+| `ref_text` | string | exact transcript of `ref_wav`                                   |
+| `seed`     | int    | sampling seed, default 0; same seed + same inputs → same audio  |
+| `out`      | path   | where to write the `.wav` (parent directories are created)      |
 
-- `--content_to_synthesize`:
-    - **Description**: Specifies the content that will be synthesized into speech. Phonetic symbols can optionally be included but should be used sparingly, as shown in the examples below:
-    - Simple text: `"今天天氣真好"`
-    - Text with phonetic symbols: `"今天天氣真好[:ㄏㄠ3]"`
+Use absolute paths: they are resolved by the process doing the synthesis. A successful result:
 
-- `--speaker_prompt_audio_path`:
-  - **Description**: Specifies the path to the prompt speech audio file for setting the style of the speaker. Use your custom audio file or our example file:
-    - Example audio: `./data/tc_speaker.wav`
-
-- `--speaker_prompt_text_transcription` (optional):
-  - **Description**: Specifies the transcription of the speaker prompt audio. Providing this input is highly recommended for better accuracy. If not provided, the system will automatically transcribe the audio using Whisper.
-  - Example text for the audio file: `"在密碼學中，加密是將明文資訊改變為難以讀取的密文內容，使之不可讀的方法。只有擁有解密方法的對象,經由解密過程才能將密文還原為正常可讀的內容。"`
-
-- `--output_path` (optional):
-  - **Description**: Specifies the name and path for the output `.wav` file. If not provided, the default path is used.
-  - **Default Value**: `results/output.wav`
-  - Example: `[your_file_name].wav`
-
-- `--model_path` (optional):
-  - **Description**: Specifies the pre-trained model used for speech synthesis.
-  - **Default Value**: `MediaTek-Research/BreezyVoice`
-
-**Example Usage:**
-
-``` bash
-bash run_single_inference.sh
+```json
+{"ok": true, "out": "/abs/out.wav", "duration_s": 4.92, "sample_rate": 22050, "seed": 1,
+ "text": "第一，你在監控情緒，大腦會放大不開心。", "elapsed_s": 8.5}
 ```
 
-``` python
-# python single_inference.py --text_to_speech [text to be converted into audio] --text_prompt [the prompt of that audio file] --audio_path [reference audio file]
-python single_inference.py --content_to_synthesize "今天天氣真好" --speaker_prompt_text_transcription "在密碼學中，加密是將明文資訊改變為難以讀取的密文內容，使之不可讀的方法。只有擁有解密方法的對象,經由解密過程才能將密文還原為正常可讀的內容。" --speaker_prompt_audio_path "./data/example.wav"
+`text` in the result is what the model actually read, after normalisation and 注音 annotation.
+Failures come back as `{"ok": false, "error": "...", "kind": "bad_request" | "synthesis_failed"}`.
+
+Text containing several sentences is split on `。？！.?!` and the pieces are concatenated,
+as upstream did; for retry-per-sentence workflows send one sentence per request.
+
+### Batch (pipes, model loaded once)
+
+```sh
+uv run breezyvoice batch < requests.jsonl > results.jsonl
 ```
 
-``` python
-# python single_inference.py --text_to_speech [text to be converted into audio] --audio_path [reference audio file]
-python single_inference.py --content_to_synthesize "今天天氣真好[:ㄏㄠ3]" --speaker_prompt_audio_path "./data/example.wav"
+Prints `{"ok": true, "ready": true}` once the model is loaded, then one JSON result line per JSON
+request line on stdin, in order. Logs go to stderr. A caller can keep the process open and write
+requests one at a time.
+
+### HTTP service (localhost, model loaded once)
+
+```sh
+uv run breezyvoice serve --port 8765
+curl -s -X POST http://127.0.0.1:8765/synthesize -H 'Content-Type: application/json' \
+  -d '{"text":"今天天氣真好。","ref_wav":"/abs/ref.wav","ref_text":"…","seed":0,"out":"/abs/out.wav"}'
+curl -s http://127.0.0.1:8765/health
 ```
 
----
+Binds to 127.0.0.1 only (requests name local files); requests are processed one at a time.
+HTTP status: 200 ok, 400 bad request, 500 synthesis failed.
 
-**Run `batch_inference.py` with the following arguments:**
+### One-off
 
-- `--csv_file`:
-  - **Description**: Path to the CSV file that contains the input data for batch processing.
-  - **Example**: `./data/batch_files.csv`
-
-- `--speaker_prompt_audio_folder`:
-  - **Description**: Path to the folder containing the speaker prompt audio files. The files in this folder are used to set the style of the speaker for each synthesis task.
-  - **Example**: `./data`
-
-- `--output_audio_folder`:
-  - **Description**: Path to the folder where the output audio files will be saved. Each processed row in the CSV will result in a synthesized audio file stored in this folder.
-  - **Example**: `./results`
-
-**CSV File Structure:**
-
-The CSV file should contain the following columns:
-
-- **`speaker_prompt_audio_filename`**:
-  - **Description**: The filename (without extension) of the speaker prompt audio file that will be used to guide the style of the generated speech.
-  - **Example**: `example`
-
-- **`speaker_prompt_text_transcription`**:
-  - **Description**: The transcription of the speaker prompt audio. This field is optional but highly recommended to improve transcription accuracy. If not provided, the system will attempt to transcribe the audio using Whisper.
-  - **Example**: `"在密碼學中，加密是將明文資訊改變為難以讀取的密文內容，使之不可讀的方法。"`
-
-- **`content_to_synthesize`**:
-  - **Description**: The content that will be synthesized into speech. You can include phonetic symbols if needed, though they should be used sparingly.
-  - **Example**: `"今天天氣真好"`
-
-- **`output_audio_filename`**:
-  - **Description**: The filename (without extension) for the generated output audio. The audio will be saved as a `.wav` file in the output folder.
-  - **Example**: `output`
-
-**Example Usage:**
-
-``` bash
-bash run_batch_inference.sh
-```
-```bash
-python batch_inference.py \
-  --csv_file ./data/batch_files.csv \
-  --speaker_prompt_audio_folder ./data \
-  --output_audio_folder ./results
+```sh
+uv run breezyvoice synth --text "今天天氣真好。" --ref-wav data/example.wav \
+  --ref-text "在密碼學中，加密是將明文資訊改變為難以讀取的密文內容，使之不可讀的方法。只有擁有解密方法的對象，經由解密過程，才能將密文還原為正常可讀的內容。" \
+  --seed 0 --out /tmp/out.wav
 ```
 
-### Docker and OpenAI Compatible API
+Loads the model on every call (~3 s); use `batch` or `serve` for more than a few sentences.
 
-``` bash
-$ docker compose up -d --build
-# after the container is up
-$ pip install openai
-$ python openai_api_inference.py
+Common options: `--device auto|cpu|mps` (auto = MPS when available), `--threads N`,
+`--weights-dir DIR` (weights from a plain directory instead of the Hugging Face cache).
+
+### Python
+
+```python
+from pathlib import Path
+from breezyvoice.loader import load
+
+tts = load("auto")
+speaker = tts.speaker(Path("ref.wav"), "transcript of ref.wav")   # cached per file + transcript
+result = tts.synthesize("今天天氣真好。", speaker, seed=0)          # result.audio: float32 numpy
 ```
 
----
+## Speed (Mac mini M4 Pro)
 
-If you like our work, please cite:
+Per sentence of about 5 s of audio, model already loaded, with other jobs running on the machine:
+
+| placement | LLM | flow | vocoder | total |
+|-----------|-----|------|---------|-------|
+| MPS (default) | 6.2 s | 2.2 s | 0.1 s | ~8.5 s |
+| CPU | 5–11 s | 5.6 s | 0.2 s | 11–17 s |
+
+Timings roughly double when the machine is busy (load average ~30). Upstream on the same machine
+took 35 s for a 3.4 s sentence (single-threaded). The autoregressive LLM dominates; its key/value
+cache concatenation is the next thing to optimise.
+
+## Text normalisation
+
+`breezyvoice/text/normalize.py` replaces upstream's WeTextProcessing/pynini dependency (which does
+not build on macOS) with rules for Taiwan Mandarin, e.g.:
+
+| input | read as |
+|-------|---------|
+| `有2個人` / `第2名` / `2月` | 有兩個人 / 第二名 / 二月 |
+| `20000元` / `200人` | 兩萬元 / 兩百人 |
+| `50%` / `3.5％` / `1-3%` | 百分之五十 / 百分之三點五 / 百分之一到三 |
+| `2025年` / `1990年代` / `2000年` / `民國114年` | 二零二五年 / 一九九零年代 / 兩千年 / 民國一百一十四年 |
+| `2025/3/5` / `10:30` / `2:00` | 二零二五年三月五日 / 十點三十分 / 兩點 |
+| `3-5天` / `1/3` / `1:2` | 三到五天 / 三分之一 / 一比二 |
+| `0912345678` | 零九一二三四五六七八 |
+| `30°C` / `5km` / `NT$300` | 三十度 / 五公里 / 三百元 |
+
+Write dates as `3月5日`; a bare `3/5` is read as a fraction. See `tests/test_normalize.py`.
+
+## Tests
+
+```sh
+uv run pytest tests/test_normalize.py   # fast, no model
+uv run pytest                            # includes the smoke test (needs `breezyvoice setup`)
+```
+
+The smoke test synthesizes a sentence with `data/example.wav` (upstream's sample voice) and checks
+the audio is finite, not silent, of plausible length, and identical for the same seed.
+
+## Differences from upstream
+
+- **Packaging:** `pyproject.toml` + `uv.lock`, Python ≥ 3.13, torch 2.9+, no CUDA or Linux-only
+  dependencies. Training code, Docker/API scripts, the bundled Matcha-TTS tree and committed
+  `__pycache__` were removed.
+- **Fewer dependencies:** the parts of Matcha-TTS, openai-whisper (tokenizer + log-mel), torchaudio
+  (Kaldi fbank, resampling) and librosa (mel filterbank) that inference uses are vendored under
+  `cosyvoice/matcha/` and `breezyvoice/_vendor/` with their licences. torchaudio, librosa/numba,
+  lightning, hydra, pyarrow, WeTextProcessing and ttsfrd are no longer needed.
+- **Model built in code** (`breezyvoice/model.py`) from the same hyper-parameters as the weights'
+  `cosyvoice.yaml`, loaded with `strict=True`.
+- **Offline by construction:** pinned revisions, explicit `setup`, no Hugging Face calls at load time.
+- **Text normalisation** of our own (above). Upstream's frontend also dropped the character before a
+  manual `[:注音]` annotation (`真好[:ㄏㄠ3]` became `真[:ㄏㄠ3]`); fixed.
+- **Speed:** no forced single thread; reference-audio features are cached per speaker; the
+  relative-position projection is reused across decoding steps (bit-identical output on CPU).
+- **Seeding:** each request seeds torch's generator before synthesis, so a seed reproduces a take.
+- Whisper auto-transcription of the reference was dropped: `ref_text` is required.
+
+Verified against upstream (torch 2.3.1) on `data/example.wav`: text annotations and token ids are
+identical, prompt speech tokens identical, mel features within 0.006; the speaker embedding differs
+slightly (cosine 0.9988) because newer onnxruntime computes the CAM++ network a little differently.
+
+## Licence
+
+Apache 2.0 (see `LICENSE`); vendored third-party code keeps its own licence file next to it (see
+`NOTICE`). Model weights: Apache 2.0 per their model card. Please cite the BreezyVoice paper:
 
 ```
 @article{hsu2025breezyvoice,
@@ -173,17 +174,5 @@ If you like our work, please cite:
   author={Hsu, Chan-Jan and Lin, Yi-Cheng and Lin, Chia-Chun and Chen, Wei-Chih and Chung, Ho Lam and Li, Chen-An and Chen, Yi-Chang and Yu, Chien-Yu and Lee, Ming-Ji and Chen, Chien-Cheng and others},
   journal={arXiv preprint arXiv:2501.17790},
   year={2025}
-}
-@article{hsu2025breeze,
-  title={The Breeze 2 Herd of Models: Traditional Chinese LLMs Based on Llama with Vision-Aware and Function-Calling Capabilities},
-  author={Hsu, Chan-Jan and Liu, Chia-Sheng and Chen, Meng-Hsi and Chen, Muxi and Hsu, Po-Chun and Chen, Yi-Chang and Shiu, Da-Shan},
-  journal={arXiv preprint arXiv:2501.13921},
-  year={2025}
-}
-@article{du2024cosyvoice,
-  title={Cosyvoice: A scalable multilingual zero-shot text-to-speech synthesizer based on supervised semantic tokens},
-  author={Du, Zhihao and Chen, Qian and Zhang, Shiliang and Hu, Kai and Lu, Heng and Yang, Yexin and Hu, Hangrui and Zheng, Siqi and Gu, Yue and Ma, Ziyang and others},
-  journal={arXiv preprint arXiv:2407.05407},
-  year={2024}
 }
 ```

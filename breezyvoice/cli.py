@@ -1,0 +1,147 @@
+"""``breezyvoice`` command line: setup, synth, batch, serve."""
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+from http import HTTPStatus
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+
+
+def _log(msg: str) -> None:
+    print(msg, file=sys.stderr, flush=True)
+
+
+def _engine(args):
+    from breezyvoice.loader import load
+
+    return load(device=args.device, weights_dir=args.weights_dir, threads=args.threads)
+
+
+def cmd_setup(args) -> int:
+    from breezyvoice import assets
+
+    found = assets.fetch(log=_log)
+    _log(f"ready: weights={found.weights_dir} g2pw={found.g2pw_dir}")
+    return 0
+
+
+def cmd_synth(args) -> int:
+    from breezyvoice.service import handle
+
+    engine = _engine(args)
+    result = handle(engine, {"text": args.text, "ref_wav": args.ref_wav, "ref_text": args.ref_text,
+                             "seed": args.seed, "out": args.out})
+    print(json.dumps(result, ensure_ascii=False), flush=True)
+    return 0 if result["ok"] else 1
+
+
+def cmd_batch(args) -> int:
+    """One JSON request per stdin line, one JSON result per stdout line; the model loads once."""
+    from breezyvoice.service import handle
+
+    engine = _engine(args)
+    print(json.dumps({"ok": True, "ready": True}), flush=True)
+    for line in sys.stdin:
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            payload = json.loads(line)
+        except json.JSONDecodeError as e:
+            result = {"ok": False, "error": f"invalid JSON: {e}", "kind": "bad_request"}
+        else:
+            result = handle(engine, payload)
+        print(json.dumps(result, ensure_ascii=False), flush=True)
+    return 0
+
+
+def cmd_serve(args) -> int:
+    from breezyvoice.service import handle
+
+    if args.host not in ("127.0.0.1", "::1", "localhost") and not args.allow_remote:
+        _log("refusing to listen on a non-loopback address without --allow-remote "
+             "(requests name local file paths)")
+        return 2
+    engine = _engine(args)
+
+    class Handler(BaseHTTPRequestHandler):
+        def _send(self, status: int, body: dict) -> None:
+            data = json.dumps(body, ensure_ascii=False).encode()
+            self.send_response(status)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+
+        def do_GET(self):  # noqa: N802
+            if self.path == "/health":
+                self._send(HTTPStatus.OK, {"ok": True, "sample_rate": engine.sample_rate})
+            else:
+                self._send(HTTPStatus.NOT_FOUND, {"ok": False, "error": "not found"})
+
+        def do_POST(self):  # noqa: N802
+            if self.path != "/synthesize":
+                self._send(HTTPStatus.NOT_FOUND, {"ok": False, "error": "not found"})
+                return
+            length = int(self.headers.get("Content-Length") or 0)
+            try:
+                payload = json.loads(self.rfile.read(length) or b"null")
+            except json.JSONDecodeError as e:
+                self._send(HTTPStatus.BAD_REQUEST, {"ok": False, "error": f"invalid JSON: {e}", "kind": "bad_request"})
+                return
+            result = handle(engine, payload)
+            status = HTTPStatus.OK if result["ok"] else (
+                HTTPStatus.BAD_REQUEST if result["kind"] == "bad_request" else HTTPStatus.INTERNAL_SERVER_ERROR)
+            self._send(status, result)
+
+        def log_message(self, fmt, *a):
+            _log(f"{self.address_string()} {fmt % a}")
+
+    server = ThreadingHTTPServer((args.host, args.port), Handler)
+    _log(f"listening on http://{args.host}:{args.port}")
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        pass
+    return 0
+
+
+def _model_args(p: argparse.ArgumentParser) -> None:
+    p.add_argument("--device", choices=("auto", "cpu", "mps"), default="auto",
+                   help="auto = MPS when available, else CPU")
+    p.add_argument("--weights-dir", type=Path, default=None,
+                   help="use BreezyVoice weights from this directory instead of the Hugging Face cache")
+    p.add_argument("--threads", type=int, default=None, help="CPU threads for torch / onnxruntime")
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(prog="breezyvoice", description=__doc__)
+    sub = parser.add_subparsers(dest="cmd", required=True)
+
+    sub.add_parser("setup", help="download models (pinned revisions) and unpack g2pW; the only networked step")
+
+    p = sub.add_parser("synth", help="synthesize one text (loads the model each time; use batch/serve for many)")
+    p.add_argument("--text", required=True)
+    p.add_argument("--ref-wav", required=True, type=Path)
+    p.add_argument("--ref-text", required=True, help="transcript of --ref-wav")
+    p.add_argument("--seed", type=int, default=0)
+    p.add_argument("--out", required=True, type=Path)
+    _model_args(p)
+
+    p = sub.add_parser("batch", help="JSON lines on stdin → JSON lines on stdout, model loaded once")
+    _model_args(p)
+
+    p = sub.add_parser("serve", help="localhost HTTP service, model loaded once")
+    p.add_argument("--host", default="127.0.0.1")
+    p.add_argument("--port", type=int, default=8765)
+    p.add_argument("--allow-remote", action="store_true")
+    _model_args(p)
+
+    args = parser.parse_args(argv)
+    return {"setup": cmd_setup, "synth": cmd_synth, "batch": cmd_batch, "serve": cmd_serve}[args.cmd](args)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -1,0 +1,18 @@
+BreezyVoice (maintained fork)
+
+This product is a modified version of BreezyVoice by MediaTek Research
+(https://github.com/mtkresearch/BreezyVoice), licensed under the Apache License 2.0,
+which is partially derived from CosyVoice by Alibaba Inc (Apache License 2.0).
+Files under cosyvoice/ keep their original copyright headers; modified files are listed
+in the git history of this repository and summarised in README.md ("Differences from upstream").
+
+Vendored third-party code (each directory contains the original licence):
+- cosyvoice/matcha/           Matcha-TTS, Copyright (c) 2023 Shivam Mehta, MIT License
+                              (mel_filters.py is a port of librosa.filters.mel, ISC License)
+- breezyvoice/_vendor/whisper/   openai-whisper v20231117, Copyright (c) 2022 OpenAI, MIT License
+- breezyvoice/_vendor/torchaudio/ torchaudio v2.3.1, BSD 2-Clause License
+
+Model weights downloaded at setup time are not part of this repository:
+- MediaTek-Research/BreezyVoice-300M (Apache License 2.0)
+- YC-Chen/g2pW G2PWModel-v2-onnx (Apache License 2.0)
+- google-bert/bert-base-chinese vocabulary (Apache License 2.0)

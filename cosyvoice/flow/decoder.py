@@ -14,8 +14,8 @@
 import torch
 import torch.nn as nn
 from einops import pack, rearrange, repeat
-from matcha.models.components.decoder import SinusoidalPosEmb, Block1D, ResnetBlock1D, Downsample1D, TimestepEmbedding, Upsample1D
-from matcha.models.components.transformer import BasicTransformerBlock
+from cosyvoice.matcha.decoder import SinusoidalPosEmb, Block1D, ResnetBlock1D, Downsample1D, TimestepEmbedding, Upsample1D
+from cosyvoice.matcha.transformer import BasicTransformerBlock
 
 
 class ConditionalDecoder(nn.Module):

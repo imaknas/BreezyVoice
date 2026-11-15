@@ -221,6 +221,32 @@ class RelPositionMultiHeadedAttention(MultiHeadedAttention):
         self.pos_bias_v = nn.Parameter(torch.Tensor(self.h, self.d_k))
         torch.nn.init.xavier_uniform_(self.pos_bias_u)
         torch.nn.init.xavier_uniform_(self.pos_bias_v)
+        # Inference-only cache of linear_pos applied to a window of the shared positional table.
+        self._pos_proj = None
+
+    # Rows added on each side when the cached window has to grow.
+    _POS_PROJ_MARGIN = 512
+
+    def _project_pos(self, pos_emb: torch.Tensor) -> torch.Tensor:
+        """linear_pos(pos_emb), reusing projections across autoregressive steps.
+
+        During decoding every step passes a slightly wider slice of the same positional table, and
+        projecting all 2K-1 rows again in every layer dominated the decode time. Rows of a bias-free
+        linear layer are independent, so a window projected once and sliced gives the same result.
+        """
+        base = pos_emb._base
+        if self.training or base is None or base.dim() != 3 or pos_emb.size(0) != 1 \
+                or not base.is_contiguous() or not pos_emb.is_contiguous():
+            return self.linear_pos(pos_emb)
+        start = pos_emb.storage_offset() // base.size(-1)
+        end = start + pos_emb.size(1)
+        cached = self._pos_proj
+        if cached is None or cached[0] is not base or start < cached[1] or end > cached[2]:
+            lo = max(0, start - self._POS_PROJ_MARGIN)
+            hi = min(base.size(1), end + self._POS_PROJ_MARGIN)
+            cached = (base, lo, hi, self.linear_pos(base[:, lo:hi]))
+            self._pos_proj = cached
+        return cached[3][:, start - cached[1]:end - cached[1]]
 
     def rel_shift(self, x):
         """Compute relative positional encoding.
@@ -299,7 +325,7 @@ class RelPositionMultiHeadedAttention(MultiHeadedAttention):
         new_cache = torch.cat((k, v), dim=-1)
 
         n_batch_pos = pos_emb.size(0)
-        p = self.linear_pos(pos_emb).view(n_batch_pos, -1, self.h, self.d_k)
+        p = self._project_pos(pos_emb).view(n_batch_pos, -1, self.h, self.d_k)
         p = p.transpose(1, 2)  # (batch, head, time1, d_k)
 
         # (batch, head, time1, d_k)
