@@ -132,6 +132,20 @@ not build on macOS) with rules for Taiwan Mandarin, e.g.:
 
 Write dates as `3月5日`; a bare `3/5` is read as a fraction. See `tests/test_normalize.py`.
 
+## Deployment
+
+To keep a long-running service from picking up half-finished edits, run it from a separate production
+checkout and update that checkout only with
+
+```sh
+bin/deploy.sh
+```
+
+It fast-forwards the production checkout to `origin/main`, runs `uv sync --locked` and the full test suite (including
+the smoke test), and only then restarts the launchd service and waits for `/health`. It can refuse to restart while a
+client is in the middle of a job (`--force` overrides). The first run clones the checkout. The paths and the service
+label of a given machine go in `deploy.env`, which git ignores; the header of the script lists the settings.
+
 ## Tests
 
 ```sh

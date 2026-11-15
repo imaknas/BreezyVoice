@@ -10,3 +10,4 @@ __pycache__/
 *.wav
 !data/example.wav
 *.log
+deploy.env
