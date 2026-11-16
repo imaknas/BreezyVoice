@@ -243,10 +243,13 @@ class RelPositionMultiHeadedAttention(MultiHeadedAttention):
         start = pos_emb.storage_offset() // base.size(-1)
         end = start + pos_emb.size(1)
         cached = self._pos_proj
-        if cached is None or cached[0] is not base or start < cached[1] or end > cached[2]:
+        # The version counter changes whenever the weights are written (an optimizer step, loading a
+        # checkpoint), which makes an earlier projection stale.
+        version = self.linear_pos.weight._version
+        if cached is None or cached[0] is not base or start < cached[1] or end > cached[2] or cached[4] != version:
             lo = max(0, start - self._POS_PROJ_MARGIN)
             hi = min(base.size(1), end + self._POS_PROJ_MARGIN)
-            cached = (base, lo, hi, self.linear_pos(base[:, lo:hi]))
+            cached = (base, lo, hi, self.linear_pos(base[:, lo:hi]), version)
             self._pos_proj = cached
         return cached[3][:, start - cached[1]:end - cached[1]]
 
