@@ -1,0 +1,109 @@
+# 補充朗讀稿：中英夾雜 60 句（X）與語氣 40 句（Y），錄音時間約 8 分鐘。
+# 已發布的旁白很少夾英文、也很少有強烈語氣，這兩種能力要靠這份稿來教。
+# X 組錄成 X.wav，Y 組錄成 Y.wav。說話方式和錄音設定請看 README.md。
+
+# ── X：中英夾雜 ────────────────────────────────────────────────
+# 英文照你平常夾在中文裡講的方式念。
+X01 這個project的timeline要再往後延兩個禮拜。
+X02 我先check一下calendar，晚點回你。
+X03 他們的marketing做得很好，branding很一致。
+X04 這個bug已經fix了，你再test一次看看。
+X05 我們需要一個backup plan，以防萬一。
+X06 客戶的requirement一直在改，真的很頭痛。
+X07 你把file上傳到cloud，我這邊就可以download。
+X08 這次的event辦得很成功，feedback都很正面。
+X09 我覺得這個price有點太high了。
+X10 他是我們team裡面最senior的engineer。
+X11 這個function的logic有點複雜，我畫個flowchart給你看。
+X12 下禮拜要demo給客戶，slides準備好了嗎？
+X13 這個brand的quality一直都很穩定。
+X14 我想要挑戰自己的comfort zone。
+X15 你的password太簡單了，最好換一個。
+X16 這家餐廳的service很好，而且CP值很高。
+X17 我們先brainstorm一下，再決定direction。
+X18 這個deal談了三個月，終於close了。
+X19 他的attitude很positive，跟他合作很愉快。
+X20 麻煩你forward那封email給manager。
+X21 這個system每天晚上會自動backup。
+X22 我最近在學coding，從Python開始。
+X23 這部電影的ending完全出乎意料。
+X24 你有沒有看過那個podcast？內容很有depth。
+X25 我們的target是年底之前達到一百萬user。
+X26 這個tool可以幫你省下很多時間。
+X27 他在LinkedIn上面po了一篇很長的文章。
+X28 這個trend大概從去年開始流行。
+X29 開會的時候記得把notification關掉。
+X30 我需要一點時間digest這些資訊。
+X31 這個offer很吸引人，但是location太遠了。
+X32 你的resume寫得不錯，可是cover letter要再改。
+X33 他們的customer service真的很有耐心。
+X34 這個version有很多新的feature。
+X35 我們要找出這個problem的root cause。
+X36 她的English很流利，presentation也很有自信。
+X37 這是一個win-win的situation。
+X38 我今天work from home，有事line我。
+X39 這個方法的效率很高，而且risk很低。
+X40 你可以用這個template，不用從頭開始做。
+X41 他們公司的culture很open，大家都敢講話。
+X42 這次的campaign預算有限，要花在刀口上。
+X43 我把重點highlight起來了，你看一下。
+X44 這個app最近update之後變得很卡。
+X45 做research的時候，source一定要可靠。
+X46 我們先設定一個小的milestone，慢慢推進。
+X47 他的schedule排得很滿，要提早預約。
+X48 這個idea很creative，可是不太practical。
+X49 記得把Wi-Fi打開，不然影片會跑不動。
+X50 我用AI幫我整理了一份summary。
+X51 這台laptop的battery可以撐十個小時。
+X52 我們的priority是先把品質顧好。
+X53 你看一下這個chart，數字其實很明顯。
+X54 他昨天在meeting上面提了一個很好的suggestion。
+X55 這個industry的變化非常快，要一直learning。
+X56 我把link貼在留言區，有興趣的可以去看。
+X57 這是我今年看過最有insight的一本書。
+X58 訂閱之後記得打開小鈴鐺，才不會miss新的影片。
+X59 這個technique我練了很久才上手。
+X60 總之，重點就是keep it simple。
+
+# ── Y：語氣 ────────────────────────────────────────────────────
+# 括號裡的字不用念，只是提示語氣。照你自己會有的反應去說。
+Y01 天啊，我完全沒有想到會是這樣！
+Y02 等等等等，你再說一次？
+Y03 哇，這個也太厲害了吧！
+Y04 不會吧，你是認真的嗎？
+Y05 太扯了，這種事情怎麼可能發生？
+Y06 拜託，不要再這樣做了。
+Y07 好險，差一點就來不及了。
+Y08 可惡，又被他搶先一步。
+Y09 耶，終於放假了！
+Y10 算了，就這樣吧，我不想再爭了。
+Y11 嗯，讓我想一下。
+Y12 欸，你有沒有發現一件事？
+Y13 喔，原來是這樣啊。
+Y14 對對對，我就是這個意思。
+Y15 不是啦，你誤會我的意思了。
+Y16 好吧，那就照你說的做。
+Y17 真的嗎？我怎麼都不知道？
+Y18 你知道最誇張的是什麼嗎？
+Y19 重點來了，請仔細聽。
+Y20 答案可能會讓你嚇一跳。
+Y21 老實說，我一開始也不相信。
+Y22 說出來你可能不信，但這是真的。
+Y23 千萬不要小看這個小動作。
+Y24 我只想說，辛苦了，你已經做得很好了。
+Y25 別擔心，這種情況很常見。
+Y26 慢慢來，我們有的是時間。
+Y27 沒關係，下次再試一次就好。
+Y28 加油，你一定可以的！
+Y29 我真的很替你開心。
+Y30 說實話，我有一點失望。
+Y31 這件事讓我難過了很久。
+Y32 那一刻，我突然什麼都懂了。
+Y33 你有沒有過這種感覺？明明很累，卻怎麼也睡不著。
+Y34 問題是，然後呢？
+Y35 所以到底是誰的錯？
+Y36 這樣真的值得嗎？
+Y37 如果是你，你會怎麼選？
+Y38 記住，只有你能決定自己的方向。
+Y39 現在就開始，不要等到明天。
+Y40 好，我們今天就聊到這裡，下次見！
