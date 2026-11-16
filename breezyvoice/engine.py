@@ -20,6 +20,35 @@ MAX_TOKEN_TEXT_RATIO = 30
 MIN_TOKEN_TEXT_RATIO = 3
 
 _SENTENCE_END = re.compile(r"(?<=[？！。.?!])\s*")
+_CLAUSE_END = re.compile(r"(?<=[，；：、,;:])")
+_ANNOTATION = re.compile(r"\[:[^\]]*\]")
+# The model was trained on utterances of up to about thirty seconds; far beyond that it loses its
+# place and repeats itself until the length limit. Sixty characters is about seventeen seconds.
+MAX_SENTENCE_CHARS = 60
+
+
+def _spoken_length(text: str) -> int:
+    return sum(ch.isalnum() for ch in _ANNOTATION.sub("", text))
+
+
+def split_long(sentence: str, limit: int = MAX_SENTENCE_CHARS) -> list[str]:
+    """Break a sentence that is too long to synthesize in one go at its commas.
+
+    Clauses are packed greedily into pieces of at most ``limit`` spoken characters. A single clause
+    longer than that has no natural break and is left whole.
+    """
+    if _spoken_length(sentence) <= limit:
+        return [sentence]
+    pieces, current = [], ""
+    for clause in _CLAUSE_END.split(sentence):
+        if current and _spoken_length(current + clause) > limit:
+            pieces.append(current)
+            current = clause
+        else:
+            current += clause
+    if current:
+        pieces.append(current)
+    return pieces
 
 
 @dataclass(frozen=True)
@@ -100,7 +129,7 @@ class BreezyVoice:
 
     def synthesize(self, text: str, speaker: Speaker, seed: int) -> Synthesis:
         annotated = self._text(text)
-        sentences = [s for s in _SENTENCE_END.split(annotated) if s]
+        sentences = [piece for s in _SENTENCE_END.split(annotated) if s for piece in split_long(s)]
         if not sentences:
             raise ValueError("nothing to synthesize after normalisation")
         with self._lock, torch.inference_mode():

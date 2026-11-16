@@ -199,9 +199,11 @@ What the instruments can and cannot see, from runs with the flow decoder deliber
 - Similarity is unreliable on takes under about two seconds (0.71–0.78 on four-character sentences).
 - The recognisers do not hear accent. Listen to `accent_sentences.txt`.
 
-Two findings about the model itself from the baseline: a 159-character sentence with commas only runs
-away into repetition until the length limit (keep sentences short; the engine splits at full stops
-only), and very short sentences occasionally come out as different words.
+Two findings about the model itself from the baseline: a 159-character sentence with commas only
+ran away into repetition until the length limit, and very short sentences occasionally come out as
+different words. The first is now avoided by breaking sentences longer than 60 characters at their
+commas before synthesis (that sentence then takes 42 s with an error rate of 0.02–0.03, against 77 s
+and 1.58); a clause that long without any comma is still at risk.
 
 ## Adapting the voice to your own recordings
 
