@@ -1,4 +1,4 @@
-"""``breezyvoice`` command line: setup, synth, batch, serve, evaluate, recording."""
+"""``breezyvoice`` command line: setup, synth, batch, serve, evaluate, recording, train."""
 from __future__ import annotations
 
 import argparse
@@ -145,10 +145,14 @@ def main(argv: list[str] | None = None) -> int:
     from breezyvoice.recording import cli as recording
 
     recording.add_parser(sub)
+    from breezyvoice.training import cli as training
+
+    training.add_parser(sub, _model_args)
 
     args = parser.parse_args(argv)
     commands = {"setup": cmd_setup, "synth": cmd_synth, "batch": cmd_batch, "serve": cmd_serve,
-                "evaluate": evaluation.main, "recording": recording.main}
+                "evaluate": evaluation.main, "recording": recording.main,
+                "train": training.main}
     return commands[args.cmd](args)
 
 

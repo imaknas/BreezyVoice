@@ -67,6 +67,18 @@ class BreezyVoice:
     def prepare_text(self, text: str) -> str:
         return self._text(text)
 
+    def text_tokens(self, text: str) -> torch.Tensor:
+        """The (1, T) int32 token ids the LM reads for ``text``: normalised, annotated, encoded."""
+        return _ids(self._encode, self._text(text))
+
+    @property
+    def networks(self) -> Networks:
+        return self._nets
+
+    @property
+    def speech_frontend(self) -> SpeechFrontend:
+        return self._speech
+
     def speaker(self, wav_path: Path, transcript: str) -> Speaker:
         """Reference features, cached by file identity and transcript."""
         stat = wav_path.stat()

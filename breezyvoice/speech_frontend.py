@@ -50,12 +50,13 @@ class SpeechFrontend:
 
     def speaker_audio(self, speech_16k: torch.Tensor) -> SpeakerAudio:
         return SpeakerAudio(
-            speech_token=self._speech_token(speech_16k),
-            speech_feat=self._speech_feat(speech_16k),
-            embedding=self._embedding(speech_16k),
+            speech_token=self.speech_token(speech_16k),
+            speech_feat=self.speech_feat(speech_16k),
+            embedding=self.embedding(speech_16k),
         )
 
-    def _speech_token(self, speech_16k: torch.Tensor) -> torch.Tensor:
+    def speech_token(self, speech_16k: torch.Tensor) -> torch.Tensor:
+        """(1, T) int32 speech tokens at 50 Hz."""
         feat = log_mel_spectrogram(speech_16k, n_mels=128)
         inputs = self._speech_tokenizer.get_inputs()
         tokens = self._speech_tokenizer.run(None, {
@@ -64,11 +65,13 @@ class SpeechFrontend:
         })[0].flatten()
         return torch.tensor([tokens.tolist()], dtype=torch.int32)
 
-    def _speech_feat(self, speech_16k: torch.Tensor) -> torch.Tensor:
+    def speech_feat(self, speech_16k: torch.Tensor) -> torch.Tensor:
+        """(1, T', 80) mel frames at 22.05 kHz."""
         speech_22k = resample(speech_16k, orig_freq=PROMPT_SAMPLE_RATE, new_freq=OUTPUT_SAMPLE_RATE)
         return _mel_22k(speech_22k).squeeze(0).transpose(0, 1).unsqueeze(0)
 
-    def _embedding(self, speech_16k: torch.Tensor) -> torch.Tensor:
+    def embedding(self, speech_16k: torch.Tensor) -> torch.Tensor:
+        """(1, 192) CAM++ speaker embedding."""
         feat = kaldi.fbank(speech_16k, num_mel_bins=80, dither=0, sample_frequency=PROMPT_SAMPLE_RATE)
         feat = feat - feat.mean(dim=0, keepdim=True)
         inp = self._campplus.get_inputs()[0].name

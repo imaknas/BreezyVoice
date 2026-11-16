@@ -203,6 +203,30 @@ Two findings about the model itself from the baseline: a 159-character sentence 
 away into repetition until the length limit (keep sentences short; the engine splits at full stops
 only), and very short sentences occasionally come out as different words.
 
+## Adapting the voice to your own recordings
+
+A voice cloned from one reference clip varies from take to take. Recording more of the same speaker
+and fine-tuning the language model on it is the route to a steadier voice; `recording/README.md`
+(Traditional Chinese) explains what and how to record. The steps:
+
+```
+breezyvoice recording split --script recording/script-stage1.txt --section B --wav DATA/B.wav --out DATA/clips
+breezyvoice train prepare --clips DATA/clips --script recording/script-stage1.txt --out DATA/features.pt
+breezyvoice train lm --features DATA/features.pt --out DATA/model
+breezyvoice evaluate run --weights-dir DATA/model --ref-wav … --ref-text … --out RUNS/tuned
+```
+
+`train lm` trains only the language model, keeps the weights at the lowest loss on script lines it
+never trained on, and writes a weights directory (the unchanged networks are linked, not copied)
+that every command accepts as `--weights-dir`. On a Mac mini M4 Pro a step with eight utterances
+takes about 1.8 s on MPS, roughly 18 times faster than the audio it covers, and uses about 19 GB.
+
+Ten minutes of recordings are enough to check the pipeline, not to improve the voice: held-out loss
+turns back up after about seven passes over the data and the takes are no steadier than before.
+
+Keep recordings, features and trained weights outside the repository. A model of a person's voice
+lets anyone make that person say anything.
+
 ## Tests
 
 ```sh
