@@ -16,7 +16,7 @@ def _log(msg: str) -> None:
 def _engine(args):
     from breezyvoice.loader import load
 
-    return load(device=args.device, weights_dir=args.weights_dir, threads=args.threads)
+    return load(device=args.device, weights_dir=args.weights_dir, threads=args.threads, sampler=args.sampler)
 
 
 def cmd_setup(args) -> int:
@@ -114,6 +114,8 @@ def _model_args(p: argparse.ArgumentParser) -> None:
     p.add_argument("--weights-dir", type=Path, default=None,
                    help="use BreezyVoice weights from this directory instead of the Hugging Face cache")
     p.add_argument("--threads", type=int, default=None, help="CPU threads for torch / onnxruntime")
+    p.add_argument("--sampler", choices=("top-k", "repetition-aware"), default="top-k",
+                   help="how the next speech token is drawn; the two give different takes for a seed")
 
 
 def main(argv: list[str] | None = None) -> int:

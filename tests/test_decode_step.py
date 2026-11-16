@@ -120,7 +120,7 @@ def _sample(llm, device: str, seed: int) -> list[int]:
         prompt_text_len=torch.tensor([prompt_text.size(1)], dtype=torch.int32, device=device),
         prompt_speech_token=prompt_speech.to(device),
         prompt_speech_token_len=torch.tensor([prompt_speech.size(1)], dtype=torch.int32, device=device),
-        embedding=embedding.to(device), sampling=25, max_token_text_ratio=10, min_token_text_ratio=3,
+        embedding=embedding.to(device), max_token_text_ratio=10, min_token_text_ratio=3,
     )
     return out.squeeze(0).tolist()
 
@@ -159,7 +159,7 @@ def test_long_text_is_not_refused_for_its_length_bound(llm):
                 text=text, text_len=torch.tensor([200], dtype=torch.int32),
                 prompt_text=prompt_text, prompt_text_len=torch.tensor([60], dtype=torch.int32),
                 prompt_speech_token=prompt_speech, prompt_speech_token_len=torch.tensor([740], dtype=torch.int32),
-                embedding=torch.randn(1, 192, generator=g), sampling=25,
+                embedding=torch.randn(1, 192, generator=g),
                 max_token_text_ratio=30, min_token_text_ratio=3,
             )
     finally:

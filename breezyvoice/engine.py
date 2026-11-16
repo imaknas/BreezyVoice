@@ -12,10 +12,10 @@ import numpy as np
 import torch
 
 from breezyvoice.model import SAMPLE_RATE, Networks
+from cosyvoice.llm.sampling import Sampler
 from breezyvoice.speech_frontend import SpeakerAudio, SpeechFrontend, load_wav_16k
 
 # Upstream decoding settings (single_inference.CustomCosyVoiceModel.inference).
-TOP_K = 25
 MAX_TOKEN_TEXT_RATIO = 30
 MIN_TOKEN_TEXT_RATIO = 3
 
@@ -82,11 +82,12 @@ class BreezyVoice:
 
     def __init__(self, networks: Networks, text_frontend: Callable[[str], str],
                  encode: Callable[[str], list[int]], speech_frontend: SpeechFrontend,
-                 speaker_cache_size: int = 8):
+                 sampler: Sampler, speaker_cache_size: int = 8):
         self._nets = networks
         self._text = text_frontend
         self._encode = encode
         self._speech = speech_frontend
+        self._sampler = sampler
         self._speakers: OrderedDict[tuple, Speaker] = OrderedDict()
         self._cache_size = speaker_cache_size
         self._lock = threading.Lock()
@@ -147,7 +148,7 @@ class BreezyVoice:
             prompt_text=speaker.text_token.to(d), prompt_text_len=_len(speaker.text_token).to(d),
             prompt_speech_token=spk.speech_token.to(d), prompt_speech_token_len=_len(spk.speech_token).to(d),
             embedding=spk.embedding.to(d),
-            beam_size=1, sampling=TOP_K,
+            sampler=self._sampler,
             max_token_text_ratio=MAX_TOKEN_TEXT_RATIO, min_token_text_ratio=MIN_TOKEN_TEXT_RATIO,
         )
         d = place.flow

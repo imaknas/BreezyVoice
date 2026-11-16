@@ -12,8 +12,12 @@ from breezyvoice.model import Placement, load_networks
 from breezyvoice.speech_frontend import SpeechFrontend, onnx_session
 from breezyvoice.text import word_stats
 from breezyvoice.text.frontend import Annotator, TextFrontend
+from cosyvoice.llm import sampling
 
 DEVICES = ("cpu", "mps", "auto")
+# Upstream decoding setting (top-k of 25), and the repetition-aware nucleus sampling later CosyVoice
+# releases use. They give different takes for the same seed.
+SAMPLERS = {"top-k": lambda: sampling.top_k(25), "repetition-aware": lambda: sampling.repetition_aware()}
 
 
 def placement_for(device: str) -> Placement:
@@ -57,7 +61,8 @@ def _encoder():
     return lambda text: tok.encode(text, allowed_special="all")
 
 
-def load(device: str = "auto", weights_dir: Path | None = None, threads: int | None = None) -> BreezyVoice:
+def load(device: str = "auto", weights_dir: Path | None = None, threads: int | None = None,
+         sampler: str = "top-k") -> BreezyVoice:
     found = assets.resolve(weights_dir)
     if threads:
         torch.set_num_threads(threads)
@@ -72,6 +77,7 @@ def load(device: str = "auto", weights_dir: Path | None = None, threads: int | N
         networks=load_networks(found.weights_dir, placement_for(device)),
         text_frontend=TextFrontend(annotator, _english_numbers()),
         encode=_encoder(),
+        sampler=SAMPLERS[sampler](),
         speech_frontend=SpeechFrontend(
             campplus=onnx_session(found.weights_dir / "campplus.onnx", ort_threads),
             speech_tokenizer=onnx_session(found.weights_dir / "speech_tokenizer_v1.onnx", ort_threads),

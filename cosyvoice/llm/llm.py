@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import Dict, Optional, Union
+from typing import Dict, Optional, Sequence
 import torch
 from torch import nn
 import torch.nn.functional as F
@@ -19,6 +19,7 @@ from torch.nn.utils.rnn import pad_sequence, unpad_sequence
 from cosyvoice.utils.common import IGNORE_ID
 from cosyvoice.transformer.label_smoothing_loss import LabelSmoothingLoss
 from cosyvoice.utils.common import th_accuracy
+from cosyvoice.llm.sampling import Sampler, top_k
 
 
 class TransformerLM(torch.nn.Module):
@@ -132,16 +133,14 @@ class TransformerLM(torch.nn.Module):
     def sampling_ids(
             self,
             weighted_scores: torch.Tensor,
-            sampling: Union[bool, int, float] = True,
-            beam_size: int = 1,
+            decoded_tokens: Sequence[int],
+            sampler: Sampler,
             ignore_eos: bool = True,
-    ):
+    ) -> int:
+        """Draw the next token; while the utterance is too short to end, draw again on end-of-speech."""
         while True:
-            prob, indices = weighted_scores.softmax(dim=-1).topk(sampling)
-            # Sample on CPU so a seed gives the same take on every device.
-            top_ids = prob.cpu().multinomial(beam_size, replacement=True)
-            top_ids = indices[top_ids.to(indices.device)]
-            if (not ignore_eos) or (self.speech_token_size not in top_ids):
+            top_ids = sampler(weighted_scores, decoded_tokens)
+            if (not ignore_eos) or top_ids != self.speech_token_size:
                 break
         return top_ids
 
@@ -155,8 +154,7 @@ class TransformerLM(torch.nn.Module):
             prompt_speech_token: torch.Tensor,
             prompt_speech_token_len: torch.Tensor,
             embedding: torch.Tensor,
-            beam_size: int = 1,
-            sampling: int = 25,
+            sampler: Sampler = top_k(25),
             max_token_text_ratio: float = 20,
             min_token_text_ratio: float = 2,
     ) -> torch.Tensor:
@@ -197,7 +195,7 @@ class TransformerLM(torch.nn.Module):
         y_pred, caches = self.llm.decode_prefill(lm_input, capacity=lm_input.size(1) + max_len)
         for i in range(max_len):
             logp = self.llm_decoder(y_pred[:, -1]).log_softmax(dim=-1)
-            top_ids = self.sampling_ids(logp.squeeze(dim=0), sampling, beam_size, ignore_eos=True if i < min_len else False).item()
+            top_ids = self.sampling_ids(logp.squeeze(dim=0), out_tokens, sampler, ignore_eos=i < min_len)
             if top_ids == self.speech_token_size:
                 break
             out_tokens.append(top_ids)
