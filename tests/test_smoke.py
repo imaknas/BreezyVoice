@@ -56,8 +56,10 @@ def test_same_seed_same_audio(engine):
     speaker = engine.speaker(REF_WAV, REF_TEXT)
     a = engine.synthesize("今天天氣真好。", speaker, seed=11).audio
     b = engine.synthesize("今天天氣真好。", speaker, seed=11).audio
-    assert a.shape == b.shape
-    assert np.allclose(a, b, atol=1e-4)
+    assert a.shape == b.shape  # the same speech tokens
+    # On CPU the two takes are bit-identical. The flow decoder and vocoder on MPS are not exactly
+    # repeatable: samples differ by up to about 2e-4 from run to run, a few steps of a 16-bit file.
+    assert np.allclose(a, b, atol=1e-3)
 
 
 def test_bad_request_is_reported_not_raised(engine, tmp_path):
