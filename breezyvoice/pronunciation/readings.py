@@ -17,6 +17,8 @@ class Reading:
     characters: tuple[str, ...]  # the characters that are spoken, in order
     readings: tuple[str, ...]  # one bopomofo reading with tone per character
     others: tuple[tuple[str, ...], ...]  # per character, its other dictionary readings
+    spoken: str = ""  # the text as it is spoken (numbers written out), punctuation included
+    positions: tuple[int, ...] = ()  # where each character sits in ``spoken``
 
 
 def load_polyphones(path: Path) -> dict[str, list[str]]:
@@ -37,8 +39,8 @@ def read(text: str, normalise: Callable[[str], str], predict: Callable[[str], Se
     predicted = predict(spoken)
     if len(predicted) != len(spoken):
         raise Unsupported(f"reading predictor returned {len(predicted)} entries for {len(spoken)} characters")
-    characters, readings = [], []
-    for character, reading in zip(spoken, predicted):
+    characters, readings, positions = [], [], []
+    for position, (character, reading) in enumerate(zip(spoken, predicted)):
         if reading is None:
             if character.isalnum():
                 raise Unsupported(f"no reading for {character!r} in {text!r}")
@@ -47,7 +49,8 @@ def read(text: str, normalise: Callable[[str], str], predict: Callable[[str], Se
             raise Unsupported(f"unexpected reading {reading!r} for {character!r}")
         characters.append(character)
         readings.append(reading)
+        positions.append(position)
     if not readings:
         raise Unsupported(f"nothing to read in {text!r}")
     others = tuple(tuple(r for r in polyphones.get(c, ()) if r != reading) for c, reading in zip(characters, readings))
-    return Reading(tuple(characters), tuple(readings), others)
+    return Reading(tuple(characters), tuple(readings), others, spoken, tuple(positions))
