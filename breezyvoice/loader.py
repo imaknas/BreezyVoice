@@ -48,6 +48,20 @@ def _g2p(g2pw_dir: Path, bert_dir: Path):
     return lambda text: converter(text)[0]
 
 
+def reading_tools(weights_dir: Path | None = None):
+    """(normalise, predict readings, path of the polyphone table), as the synthesizer's text front end has them.
+
+    ``normalise`` writes a text out the way it will be spoken; ``predict`` returns one bopomofo reading
+    with tone per character of its input, or None for what is not spoken.
+    """
+    from breezyvoice.text.frontend import normalize
+
+    found = assets.resolve(weights_dir)
+    spell = _english_numbers()
+    return (lambda text: normalize(text, spell)), _g2p(found.g2pw_dir, found.bert_dir), \
+        found.g2pw_dir / "POLYPHONIC_CHARS.txt"
+
+
 def _english_numbers():
     import inflect
 
