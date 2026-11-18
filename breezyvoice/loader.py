@@ -15,9 +15,10 @@ from breezyvoice.text.frontend import Annotator, TextFrontend
 from cosyvoice.llm import sampling
 
 DEVICES = ("cpu", "mps", "auto")
-# Upstream decoding setting (top-k of 25), and the repetition-aware nucleus sampling later CosyVoice
-# releases use. They give different takes for the same seed.
-SAMPLERS = {"top-k": lambda: sampling.top_k(25), "repetition-aware": lambda: sampling.repetition_aware()}
+# "top-k" is the upstream decoding setting and reproduces takes made with it. The two give different
+# takes for the same seed.
+SAMPLERS = {"repetition-aware": lambda: sampling.repetition_aware(), "top-k": lambda: sampling.top_k(25)}
+DEFAULT_SAMPLER = "repetition-aware"
 
 
 def placement_for(device: str) -> Placement:
@@ -62,7 +63,7 @@ def _encoder():
 
 
 def load(device: str = "auto", weights_dir: Path | None = None, threads: int | None = None,
-         sampler: str = "top-k") -> BreezyVoice:
+         sampler: str = DEFAULT_SAMPLER) -> BreezyVoice:
     found = assets.resolve(weights_dir)
     if threads:
         torch.set_num_threads(threads)

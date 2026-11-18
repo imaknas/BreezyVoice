@@ -123,6 +123,29 @@ the machine is busy (load average ~30), CPU more than MPS. Upstream on the same 
 a 3.4 s sentence. Most of the time is still the autoregressive LLM; the cost of a step grows with
 the length of the reference clip, which sits in its attention cache.
 
+## Sampling
+
+Each speech token is drawn from the most likely tokens that together reach 80% of the probability, and
+a token that already fills three of the last ten positions is not drawn again (`--sampler
+repetition-aware`, the default). `--sampler top-k` is the upstream setting, a plain draw among the 25
+most likely tokens; use it to reproduce a take made before the default changed, since the two give
+different takes for the same seed.
+
+On 150 narration sentences with one reference voice, counting takes in which two recognisers both
+miss a syllable, and takes with a pause the text does not call for:
+
+| sampler | syllable missed | unmarked pause | seconds per character |
+|---------|-----------------|----------------|-----------------------|
+| top-k 25 (upstream) | 43% | 24% | 0.258 |
+| nucleus, repeat limit 1 of 10 (CosyVoice's setting) | 42% | 14% | 0.218 |
+| nucleus, repeat limit 2 of 10 | 40% | 15% | 0.246 |
+| nucleus, repeat limit 3 of 10 (default) | 33% | 23% | 0.261 |
+| nucleus, no repeat limit | 32% | 20% | 0.325 |
+
+The repeat limit sets the pace: this model produces 50 tokens per second, a held sound repeats its
+token, and a strict limit cuts held sounds short. The stricter settings pause less but speak faster and,
+to a listener, slur; the default keeps the pace of the upstream setting and misses fewer syllables.
+
 ## Text normalisation
 
 `breezyvoice/text/normalize.py` replaces upstream's WeTextProcessing/pynini dependency (which does

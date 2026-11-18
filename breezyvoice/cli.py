@@ -114,8 +114,8 @@ def _model_args(p: argparse.ArgumentParser) -> None:
     p.add_argument("--weights-dir", type=Path, default=None,
                    help="use BreezyVoice weights from this directory instead of the Hugging Face cache")
     p.add_argument("--threads", type=int, default=None, help="CPU threads for torch / onnxruntime")
-    p.add_argument("--sampler", choices=("top-k", "repetition-aware"), default="top-k",
-                   help="how the next speech token is drawn; the two give different takes for a seed")
+    p.add_argument("--sampler", choices=("repetition-aware", "top-k"), default="repetition-aware",
+                   help="how the next speech token is drawn; top-k reproduces takes made before the default changed")
 
 
 def main(argv: list[str] | None = None) -> int:

@@ -25,15 +25,19 @@ def top_k(k: int = 25) -> Sampler:
     return sample
 
 
-def repetition_aware(top_p: float = 0.8, k: int = 25, window: int = 10, max_share: float = 0.1) -> Sampler:
+def repetition_aware(top_p: float = 0.8, k: int = 25, window: int = 10, max_share: float = 0.3) -> Sampler:
     """Nucleus sampling that backs off when it starts to repeat itself.
 
     The token is drawn from the most likely tokens that together reach ``top_p`` of the probability
     (at most ``k`` of them), which keeps unlikely tokens out; a token-by-token decoder that samples
     one rarely recovers its place. If the drawn token already makes up ``max_share`` of the last
     ``window`` tokens, it is excluded and the step is drawn again from everything else, which breaks
-    the loops such a decoder otherwise falls into (VALL-E 2, arXiv:2406.05370; the defaults are
-    CosyVoice's).
+    the loops such a decoder otherwise falls into (VALL-E 2, arXiv:2406.05370).
+
+    ``max_share`` also sets the pace of the speech. At 50 tokens per second a held sound is the
+    same token several times over, so a strict limit shortens every held sound: with CosyVoice's
+    0.1 (tuned for 25 tokens per second) this model speaks about 15% faster and slurs; with no
+    limit, about 25% slower. At 0.3 the pace is that of plain top-k sampling.
     """
 
     def sample(log_probs: torch.Tensor, decoded: Sequence[int]) -> int:
