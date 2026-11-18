@@ -8,6 +8,30 @@ from typing import Callable, Mapping, Sequence
 from breezyvoice.pronunciation.units import is_reading
 
 
+# Readings of one character that are all in ordinary use in Taiwan: hearing one where another was
+# predicted is not a mistake.
+FREE_VARIANTS = {
+    "液": ("ㄧㄝ4", "ㄧ4"), "那": ("ㄋㄚ4", "ㄋㄟ4"), "這": ("ㄓㄜ4", "ㄓㄟ4"), "誰": ("ㄕㄟ2", "ㄕㄨㄟ2"),
+    "熟": ("ㄕㄡ2", "ㄕㄨ2"), "血": ("ㄒㄧㄝ3", "ㄒㄩㄝ4", "ㄒㄩㄝ3"), "暴": ("ㄅㄠ4", "ㄆㄨ4"),
+    "哪": ("ㄋㄚ3", "ㄋㄟ3"), "角": ("ㄐㄧㄠ3", "ㄐㄩㄝ2"),
+}
+# Initials and finals most speakers in Taiwan do not keep apart.
+_MERGERS = str.maketrans({"ㄓ": "ㄗ", "ㄔ": "ㄘ", "ㄕ": "ㄙ"})
+
+
+def _merged(reading: str) -> str:
+    body = reading[:-1].translate(_MERGERS)
+    if body.endswith("ㄥ") and not body.endswith(("ㄨㄥ", "ㄩㄥ")):
+        body = body[:-1] + "ㄣ"
+    return body
+
+
+def _same_to_a_listener(character: str, a: str, b: str) -> bool:
+    """Would hearing ``b`` for ``a`` pass as correct: a free variant, or the same sounds after the mergers?"""
+    variants = FREE_VARIANTS.get(character, ())
+    return (a in variants and b in variants) or _merged(a) == _merged(b)
+
+
 class Unsupported(ValueError):
     """The text holds something the recogniser has no units for (Latin words, for instance)."""
 
@@ -52,5 +76,8 @@ def read(text: str, normalise: Callable[[str], str], predict: Callable[[str], Se
         positions.append(position)
     if not readings:
         raise Unsupported(f"nothing to read in {text!r}")
-    others = tuple(tuple(r for r in polyphones.get(c, ()) if r != reading) for c, reading in zip(characters, readings))
+    # tone apart, a rival must be something a listener would hear as different
+    others = tuple(tuple(r for r in polyphones.get(c, ())
+                         if r != reading and (r[:-1] == reading[:-1] or not _same_to_a_listener(c, reading, r)))
+                   for c, reading in zip(characters, readings))
     return Reading(tuple(characters), tuple(readings), others, spoken, tuple(positions))

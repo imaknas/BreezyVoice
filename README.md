@@ -40,6 +40,7 @@ Every mode takes the same request and writes a 22.05 kHz mono 16-bit wav:
 | `seed`     | int    | sampling seed, default 0; same seed + same inputs → same audio  |
 | `out`      | path   | where to write the `.wav` (parent directories are created)      |
 | `min_pause_s` | float | shortest silence reported in `pauses`, default 0.25 (optional) |
+| `tidy_pauses` | bool | with `--checker`: shorten unnatural pauses, default true (optional) |
 
 Use absolute paths: they are resolved by the process doing the synthesis. A successful result:
 
@@ -235,6 +236,54 @@ ran away into repetition until the length limit, and very short sentences occasi
 different words. The first is now avoided by breaking sentences longer than 60 characters at their
 commas before synthesis (that sentence then takes 42 s with an error rate of 0.02–0.03, against 77 s
 and 1.58); a clause that long without any comma is still at risk.
+
+## Checking and mending takes
+
+A recogniser that writes characters cannot tell whether a take was pronounced as intended: it picks the
+character from context, so 調 read as diào still comes out as 调. `breezyvoice pronunciation` works on
+sound units instead (initials, and finals with their tone), using the readings the synthesizer's own
+predictor intends for the text:
+
+```
+breezyvoice pronunciation train --manifest DATA/train.jsonl --out DATA/checker.pt   # {"wav": …, "text": …} per line
+breezyvoice pronunciation check --model DATA/checker.pt --manifest DATA/takes.jsonl
+breezyvoice serve --checker DATA/checker.pt                                          # also synth and batch
+```
+
+With `--checker`, every take is reviewed and the result carries a `review`:
+
+```json
+{"needs_retake": true,
+ "wrong_readings": [{"character": "調", "position": 14, "intended": "ㄊㄧㄠ2", "heard": "ㄉㄧㄠ4", "margin": -9.81}],
+ "extra_before": [], "extra_after": [],
+ "unnatural_pauses": [{"after": "物", "position": 3, "seconds": 0.16, "at_punctuation": false}],
+ "tidied": true}
+```
+
+- `wrong_readings`: characters whose sounds fit another of their dictionary readings clearly better.
+- `extra_before` / `extra_after`: sound units heard before the sentence starts or after it ends.
+- `unnatural_pauses`: silences of 0.14 s or more where the text has no punctuation, and pauses longer
+  than 0.50 s at punctuation. These are shortened in the audio (`"tidy_pauses": false` in the request
+  keeps them); the other two can only be fixed by another seed, which is what `needs_retake` says.
+
+A review takes about 0.1 s for a five-second take on CPU. Text with Latin words is synthesized but not
+reviewed (`"review": {"unsupported": …}`).
+
+The recogniser is trained on speech with known text; the one behind the numbers below saw 44 minutes
+of this synthesizer's own output in one voice plus ten minutes of that speaker's recordings (about
+twenty minutes of training on a Mac mini M4 Pro, 0.45 s a step). Checked against fifty takes a
+listener went through one by one:
+
+| | found | missed | false alarms |
+|---|---|---|---|
+| wrong reading of a character | 1 of 1 | – | none above the reporting threshold among the takes he called right; one he was unsure of |
+| unnatural pause (rule above, pauses placed by alignment) | 11 of 15 | 4 | 3 of 35 |
+| extra sound at the start or end | 3 of 3 | – | 0 of 46 |
+
+What it does not do: tones (the same syllable in another tone is flagged in most correct takes, so tone
+is left out of the review), an extra sound in the middle of a sentence, and a hesitation made by
+drawing a syllable out rather than by silence. It also inherits the reading predictor's mistakes: where
+the predictor expects the wrong reading, a correct take is reported.
 
 ## Adapting the voice to your own recordings
 

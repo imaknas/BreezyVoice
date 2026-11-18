@@ -31,14 +31,15 @@ def flatten(readings: Iterable[str]) -> list[str]:
     return [unit for reading in readings for unit in units(reading)]
 
 
-def alternatives(reading: str, other_readings: Sequence[str], known_units: Mapping[str, int] | Iterable[str]) -> list[str]:
-    """Readings ``reading`` could have been said as instead, most informative first.
+def alternatives(reading: str, other_readings: Sequence[str], known_units: Mapping[str, int] | Iterable[str],
+                 tones: bool = True) -> list[str]:
+    """Readings ``reading`` could have been said as instead.
 
-    The same syllable in the other tones, then the character's other dictionary readings. Readings
-    the recogniser has no unit for are left out: it cannot say anything about them.
+    The character's other dictionary readings and, with ``tones``, the same syllable in the other
+    tones. Readings the recogniser has no unit for are left out: it cannot say anything about them.
     """
     known = set(known_units)
     body = reading[:-1]
-    candidates = [body + tone for tone in TONES if tone != reading[-1]]
-    candidates += [r for r in other_readings if r != reading and r not in candidates]
+    candidates = [body + tone for tone in TONES if tone != reading[-1]] if tones else []
+    candidates += [r for r in other_readings if r != reading and r not in candidates and (tones or r[:-1] != body)]
     return [r for r in candidates if is_reading(r) and all(u in known for u in units(r))]

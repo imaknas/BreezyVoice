@@ -62,6 +62,24 @@ def reading_tools(weights_dir: Path | None = None):
         found.g2pw_dir / "POLYPHONIC_CHARS.txt"
 
 
+def reviewer(recognizer_path: Path, weights_dir: Path | None = None):
+    """A ``Reviewer`` for finished takes, from a sound-unit recogniser trained with
+    ``breezyvoice pronunciation train``."""
+    from breezyvoice._vendor.torchaudio.resample import resample
+    from breezyvoice.pronunciation import model
+    from breezyvoice.pronunciation.readings import load_polyphones, read
+    from breezyvoice.pronunciation.review import Reviewer
+
+    normalise, predict, table = reading_tools(weights_dir)
+    polyphones = load_polyphones(table)
+
+    def to_16k(audio, sample_rate: int) -> torch.Tensor:
+        wave = torch.from_numpy(audio).to(torch.float32).unsqueeze(0)
+        return resample(wave, orig_freq=sample_rate, new_freq=model.SAMPLE_RATE).squeeze(0)
+
+    return Reviewer(model.load(recognizer_path), lambda text: read(text, normalise, predict, polyphones), to_16k)
+
+
 def _english_numbers():
     import inflect
 

@@ -30,6 +30,7 @@ def test_alternatives_are_other_tones_then_other_readings_that_have_units():
     known = {"ㄊ", "ㄉ", "ㄧㄠ1", "ㄧㄠ2", "ㄧㄠ4", "ㄓ", "ㄡ1"}
     assert alternatives("ㄊㄧㄠ2", ["ㄉㄧㄠ4", "ㄓㄡ1", "ㄊㄧㄠ4"], known) == ["ㄊㄧㄠ1", "ㄊㄧㄠ4", "ㄉㄧㄠ4", "ㄓㄡ1"]
     assert alternatives("ㄊㄧㄠ2", ["ㄉㄧㄠ3"], known) == ["ㄊㄧㄠ1", "ㄊㄧㄠ4"]  # no unit for ㄧㄠ3
+    assert alternatives("ㄊㄧㄠ2", ["ㄉㄧㄠ4", "ㄊㄧㄠ4"], known, tones=False) == ["ㄉㄧㄠ4"]
 
 
 def test_load_polyphones(tmp_path):
@@ -48,6 +49,13 @@ def test_read_skips_punctuation_and_lists_other_readings():
     assert reading.characters == ("調", "大", "一")
     assert reading.readings == ("ㄊㄧㄠ2", "ㄉㄚ4", "ㄧ1")
     assert reading.others == (("ㄉㄧㄠ4",), (), ())
+
+
+def test_read_leaves_out_rivals_a_listener_would_not_hear_as_different():
+    predict = lambda text: [{"液": "ㄧㄝ4", "暫": "ㄓㄢ4", "行": "ㄒㄧㄥ2"}.get(ch) for ch in text]  # noqa: E731
+    table = {"液": ["ㄧㄝ4", "ㄧ4"], "暫": ["ㄓㄢ4", "ㄗㄢ4", "ㄓㄢ3"], "行": ["ㄒㄧㄥ2", "ㄒㄧㄣ2", "ㄏㄤ2"]}
+    reading = read("液暫行", lambda t: t, predict, table)
+    assert reading.others == ((), ("ㄓㄢ3",), ("ㄏㄤ2",))  # free variant; retroflex and -ng mergers
 
 
 def test_read_applies_normalisation_first():
@@ -85,6 +93,14 @@ def test_score_prefers_the_reading_that_was_spoken():
 
     wrong = score(_posteriors(VOCAB, flatten(["ㄉㄧㄠ4", "ㄉㄚ4"])), readings, others, INDEX)
     assert wrong[0].margin < -3 and wrong[0].rival == "ㄉㄧㄠ4"
+
+
+def test_score_without_tones_ignores_a_tone_slip_but_not_another_reading():
+    readings = ["ㄊㄧㄠ2"]
+    tone_slip = score(_posteriors(VOCAB, ["ㄊ", "ㄧㄠ4"]), readings, [["ㄉㄧㄠ4"]], INDEX, tones=False)
+    assert tone_slip[0].rival == "ㄉㄧㄠ4" and tone_slip[0].margin > 0
+    other = score(_posteriors(VOCAB, ["ㄉ", "ㄧㄠ4"]), readings, [["ㄉㄧㄠ4"]], INDEX, tones=False)
+    assert other[0].margin < -3
 
 
 def test_score_names_the_tone_when_only_the_tone_is_off():

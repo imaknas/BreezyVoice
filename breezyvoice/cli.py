@@ -19,6 +19,14 @@ def _engine(args):
     return load(device=args.device, weights_dir=args.weights_dir, threads=args.threads, sampler=args.sampler)
 
 
+def _reviewer(args):
+    if args.checker is None:
+        return None
+    from breezyvoice.loader import reviewer
+
+    return reviewer(args.checker, weights_dir=args.weights_dir)
+
+
 def cmd_setup(args) -> int:
     from breezyvoice import assets
 
@@ -31,8 +39,8 @@ def cmd_synth(args) -> int:
     from breezyvoice.service import handle
 
     engine = _engine(args)
-    result = handle(engine, {"text": args.text, "ref_wav": args.ref_wav, "ref_text": args.ref_text,
-                             "seed": args.seed, "out": args.out})
+    result = handle(engine, {"text": args.text, "ref_wav": str(args.ref_wav), "ref_text": args.ref_text,
+                             "seed": args.seed, "out": str(args.out)}, _reviewer(args))
     print(json.dumps(result, ensure_ascii=False), flush=True)
     return 0 if result["ok"] else 1
 
@@ -42,6 +50,7 @@ def cmd_batch(args) -> int:
     from breezyvoice.service import handle
 
     engine = _engine(args)
+    review = _reviewer(args)
     print(json.dumps({"ok": True, "ready": True}), flush=True)
     for line in sys.stdin:
         line = line.strip()
@@ -52,7 +61,7 @@ def cmd_batch(args) -> int:
         except json.JSONDecodeError as e:
             result = {"ok": False, "error": f"invalid JSON: {e}", "kind": "bad_request"}
         else:
-            result = handle(engine, payload)
+            result = handle(engine, payload, review)
         print(json.dumps(result, ensure_ascii=False), flush=True)
     return 0
 
@@ -65,6 +74,7 @@ def cmd_serve(args) -> int:
              "(requests name local file paths)")
         return 2
     engine = _engine(args)
+    review = _reviewer(args)
 
     class Handler(BaseHTTPRequestHandler):
         def _send(self, status: int, body: dict) -> None:
@@ -91,7 +101,7 @@ def cmd_serve(args) -> int:
             except json.JSONDecodeError as e:
                 self._send(HTTPStatus.BAD_REQUEST, {"ok": False, "error": f"invalid JSON: {e}", "kind": "bad_request"})
                 return
-            result = handle(engine, payload)
+            result = handle(engine, payload, review)
             status = HTTPStatus.OK if result["ok"] else (
                 HTTPStatus.BAD_REQUEST if result["kind"] == "bad_request" else HTTPStatus.INTERNAL_SERVER_ERROR)
             self._send(status, result)
@@ -114,6 +124,8 @@ def _model_args(p: argparse.ArgumentParser) -> None:
     p.add_argument("--weights-dir", type=Path, default=None,
                    help="use BreezyVoice weights from this directory instead of the Hugging Face cache")
     p.add_argument("--threads", type=int, default=None, help="CPU threads for torch / onnxruntime")
+    p.add_argument("--checker", type=Path, default=None,
+                   help="sound-unit recogniser from `pronunciation train`: review each take and tidy its pauses")
     p.add_argument("--sampler", choices=("repetition-aware", "top-k"), default="repetition-aware",
                    help="how the next speech token is drawn; top-k reproduces takes made before the default changed")
 
