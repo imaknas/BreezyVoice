@@ -269,19 +269,20 @@ With `--checker`, every take is reviewed and the result carries a `review`:
 A review takes about 0.1 s for a five-second take on CPU. Text with Latin words is synthesized but not
 reviewed (`"review": {"unsupported": …}`).
 
-The recogniser is trained on speech with known text; the one behind the numbers below saw 44 minutes
-of this synthesizer's own output in one voice plus ten minutes of that speaker's recordings (about
-twenty minutes of training on a Mac mini M4 Pro, 0.45 s a step). Checked against fifty takes a
-listener went through one by one:
+The recogniser is trained on speech with known text; the one behind the numbers below saw three hours
+of this synthesizer's own output in one voice (takes whose syllables two recognisers confirmed) plus
+ten minutes of that speaker's recordings: 8,000 steps, about an hour on a Mac mini M4 Pro. On text it
+was not trained on it gets 2.7% of the sound units and 3.9% of the tones wrong; with a quarter of the
+data, 5.8% and 8.1%. Checked against fifty takes a listener went through one by one:
 
 | | found | missed | false alarms |
 |---|---|---|---|
-| wrong reading of a character | 1 of 1 | – | none above the reporting threshold among the takes he called right; one he was unsure of |
+| wrong reading of a character | 1 of 1 | – | 0 of 49 |
 | unnatural pause (rule above, pauses placed by alignment) | 11 of 15 | 4 | 3 of 35 |
-| extra sound at the start or end | 3 of 3 | – | 0 of 46 |
+| extra sound at the start or end | 2 of 3 | 1 (a single faint consonant) | 0 of 47 |
 
-What it does not do: tones (the same syllable in another tone is flagged in most correct takes, so tone
-is left out of the review), an extra sound in the middle of a sentence, and a hesitation made by
+What it does not do: tones (the same syllable in another tone still comes out ahead somewhere in thirty of
+those fifty takes, none of which the listener heard as a tone error, so tone is left out of the review), an extra sound in the middle of a sentence, and a hesitation made by
 drawing a syllable out rather than by silence. It also inherits the reading predictor's mistakes: where
 the predictor expects the wrong reading, a correct take is reported.
 
