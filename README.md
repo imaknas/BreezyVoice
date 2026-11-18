@@ -221,6 +221,14 @@ What the instruments can and cannot see, from runs with the flow decoder deliber
   takes than one that does not.
 - Similarity is unreliable on takes under about two seconds (0.71–0.78 on four-character sentences).
 - The recognisers do not hear accent. Listen to `accent_sentences.txt`.
+- The syllable comparison is built for Taiwanese Mandarin. Both texts are converted to Simplified
+  script first, because the syllable converter chooses among a character's readings from Simplified
+  phrases and otherwise reads 著, 乾, 樂, 沒, 調 or 傳 differently on the two sides; initials and finals
+  that speakers in Taiwan merge (zh/z, ch/c, sh/s, -ing/-in, -eng/-en) are merged; and readings that
+  are standard in Taiwan (和 as hàn, 液 as yì) are accepted. Without this about a third of the takes
+  flagged for a missed syllable were speech that was right: on 150 sentences the share of flagged takes
+  fell from 33% to 22%. The percentages in the Sampling table were measured before this correction;
+  the order of the settings is the same after it (33%, 32%, 25%, 22%, 18%).
 
 Two findings about the model itself from the baseline: a 159-character sentence with commas only
 ran away into repetition until the length limit, and very short sentences occasionally come out as

@@ -185,21 +185,55 @@ def to_simplified() -> Callable[[str], str]:
 
 _DIGITS = str.maketrans("0123456789", "零一二三四五六七八九")
 
+# (expected, heard) syllables that are both right in Taiwan: the standard reading there differs from
+# the one the syllable converter gives, or the character has two readings in free variation.
+# Syllables are written as ``taiwan_syllables`` returns them.
+TAIWAN_READINGS = frozenset({
+    ("he", "han"),   # 和
+    ("ye", "yi"),    # 液
+    ("la", "le"), ("ji", "se"),  # 垃圾
+    ("zu", "ze"), ("zu", "zao"), ("zu", "zuo"),  # 著 / 着
+    ("na", "nei"), ("ze", "zei"), ("sui", "sei"),  # 那, 這, 誰
+    ("su", "sou"),   # 熟
+    ("xue", "xie"),  # 血
+    ("bao", "pu"),   # 暴露
+    ("jue", "jiao"),  # 角色
+    ("wo", "gua"), ("kuo", "gua"),  # 蝸, 括
+    ("xiao", "yao"),  # 混淆
+    ("di", "ti"),    # 堤
+})
 
-def toneless_pinyin() -> Callable[[str], list[str]]:
-    """Text -> one toneless pinyin syllable per Chinese character, plus lower-cased Latin words.
 
-    Digits are read one by one; punctuation and spaces are dropped.
+def _taiwan_merger(syllable: str) -> str:
+    """Drop the distinctions most speakers in Taiwan do not make (and recognisers therefore hear
+    either way): retroflex against dental initials, and -ing/-eng against -in/-en."""
+    import re
+
+    syllable = re.sub(r"^(zh|ch|sh)", lambda m: m.group(1)[0], syllable)
+    return re.sub(r"eng$", "en", re.sub(r"ing$", "in", syllable))
+
+
+def taiwan_syllables() -> Callable[[str], list[str]]:
+    """Text -> one toneless syllable per Chinese character, plus lower-cased Latin words.
+
+    Both the expected text and what a recogniser returned must go through this. The text is first
+    converted to Simplified script, because the converter picks the reading of a character with
+    several readings from Simplified phrases: fed Traditional text it reads 著, 乾, 樂, 沒, 調 or 傳
+    differently from the same word in a recogniser's Simplified output, and the two sides then
+    disagree about speech that was right. Digits are read one by one; punctuation is dropped.
     """
     import re
     import unicodedata
 
+    import opencc
     from pypinyin import Style, lazy_pinyin
+
+    simplify = opencc.OpenCC("t2s").convert
 
     def latin_words(chunk: str) -> list[str]:
         return re.findall(r"[a-z]+", chunk.lower())
 
     def syllables(text: str) -> list[str]:
-        text = unicodedata.normalize("NFKC", text).translate(_DIGITS)
-        return lazy_pinyin(text, style=Style.NORMAL, errors=latin_words)
+        text = simplify(unicodedata.normalize("NFKC", text)).translate(_DIGITS)
+        return [_taiwan_merger(s) for s in lazy_pinyin(text, style=Style.NORMAL, errors=latin_words)]
     return syllables

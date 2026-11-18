@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import difflib
-from typing import Callable, Sequence
+from typing import Callable, Collection, Sequence
 
 
 def comparable(text: str, unify_script: Callable[[str], str]) -> str:
@@ -35,13 +35,24 @@ def character_error_rate(reference: str, hypothesis: str, unify_script: Callable
     return edit_distance(ref, comparable(hypothesis, unify_script)) / len(ref)
 
 
-def syllable_match(reference: str, hypothesis: str, to_syllables: Callable[[str], Sequence[str]]) -> float:
+def syllable_match(reference: str, hypothesis: str, to_syllables: Callable[[str], Sequence[str]],
+                   variants: Collection[tuple[str, str]] = frozenset()) -> float:
     """Similarity (0-1) of the two texts as syllable sequences.
 
     Homophones and script differences do not count against the synthesizer here, which makes this
-    the measure to gate on when deciding whether a take has to be redone.
+    the measure to gate on when deciding whether a take has to be redone. ``variants`` lists
+    (expected, heard) syllable pairs that are also accepted: readings that are correct for the
+    speaker's variety of the language although the syllable converter expects another.
     """
-    return difflib.SequenceMatcher(None, to_syllables(reference), to_syllables(hypothesis), autojunk=False).ratio()
+    ref, hyp = list(to_syllables(reference)), list(to_syllables(hypothesis))
+    if not ref and not hyp:
+        return 1.0
+    matcher = difflib.SequenceMatcher(None, ref, hyp, autojunk=False)
+    same = sum(block.size for block in matcher.get_matching_blocks())
+    for op, a0, a1, b0, b1 in matcher.get_opcodes():
+        if op == "replace" and a1 - a0 == b1 - b0:
+            same += sum(pair in variants for pair in zip(ref[a0:a1], hyp[b0:b1]))
+    return 2 * same / (len(ref) + len(hyp))
 
 
 _BREAKS = set("，、；：,;:—…。！？!?")

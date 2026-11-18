@@ -4,7 +4,7 @@ from __future__ import annotations
 import statistics
 import time
 from pathlib import Path
-from typing import Callable, Mapping, Sequence
+from typing import Callable, Collection, Mapping, Sequence
 
 import numpy as np
 
@@ -51,6 +51,7 @@ def evaluate(synthesize: Synthesize, sentences: Sequence[str], seeds: Sequence[i
              reference_embedding: np.ndarray,
              unify_script: Callable[[str], str],
              to_syllables: Callable[[str], Sequence[str]],
+             syllable_variants: Collection[tuple[str, str]],
              save_wav: Callable[[str, np.ndarray, int], None],
              clock: Callable[[], float] = time.perf_counter,
              log: Callable[[str], None] = print) -> list[dict]:
@@ -70,7 +71,8 @@ def evaluate(synthesize: Synthesize, sentences: Sequence[str], seeds: Sequence[i
                 "seconds": len(audio) / sample_rate, "wall_seconds": wall,
                 "heard": heard,
                 "cer": {asr: character_error_rate(sentence, text, unify_script) for asr, text in heard.items()},
-                "syllable_match": {asr: syllable_match(sentence, text, to_syllables) for asr, text in heard.items()},
+                "syllable_match": {asr: syllable_match(sentence, text, to_syllables, syllable_variants)
+                                   for asr, text in heard.items()},
                 "similarity": float(embed(audio, sample_rate) @ reference_embedding),
                 "seconds_per_char": len(audio) / sample_rate / chars,
                 "clipped_fraction": signal.clipped_fraction(audio),

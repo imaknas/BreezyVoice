@@ -93,7 +93,8 @@ def _run(args) -> int:
     synthesize("暖機。", 0)  # first call pays one-time graph compilation; keep it out of the timings
     load_before = os.getloadavg()[0]
     records = evaluate(synthesize, load_sentences(args.sentences), args.seeds, transcribers, embed,
-                       embed(reference, reference_rate), unify, models.toneless_pinyin(), save_wav, log=_log)
+                       embed(reference, reference_rate), unify, models.taiwan_syllables(),
+                       models.TAIWAN_READINGS, save_wav, log=_log)
     result = {
         "meta": {
             "label": args.label, "commit": _commit(), "device": args.device, "sampler": args.sampler,

@@ -49,11 +49,30 @@ def test_syllable_match_counts_homophones_as_equal():
     assert syllable_match("刺痛", "喫痛", to_syllables) == pytest.approx(0.5)
 
 
-def test_toneless_pinyin_reads_digits_one_by_one_and_keeps_latin_words():
-    pytest.importorskip("pypinyin")
-    from breezyvoice.evaluation.models import toneless_pinyin
+def test_syllable_match_accepts_listed_variants_only_one_for_one():
+    to_syllables = lambda text: text.split()  # noqa: E731
+    assert syllable_match("wo he ni", "wo han ni", to_syllables) == pytest.approx(2 / 3)
+    assert syllable_match("wo he ni", "wo han ni", to_syllables, {("he", "han")}) == 1
+    assert syllable_match("wo han ni", "wo he ni", to_syllables, {("he", "han")}) == pytest.approx(2 / 3)
+    assert syllable_match("", "", to_syllables) == 1
 
-    assert toneless_pinyin()("軟體 1968，Hello！") == ["ruan", "ti", "yi", "jiu", "liu", "ba", "hello"]
+
+def test_taiwan_syllables():
+    pytest.importorskip("pypinyin")
+    pytest.importorskip("opencc")
+    from breezyvoice.evaluation.models import TAIWAN_READINGS, taiwan_syllables
+
+    syllables = taiwan_syllables()
+    assert syllables("軟體 1968，Hello！") == ["ruan", "ti", "yi", "jiu", "liu", "ba", "hello"]
+    # the same word in either script reads the same
+    for traditional, simplified in [("嘴乾", "嘴干"), ("音樂", "音乐"), ("沉沒", "沉没"), ("調節", "调节"), ("傳遞", "传递")]:
+        assert syllables(traditional) == syllables(simplified), traditional
+    # distinctions not made in Taiwan are merged
+    assert syllables("是四十") == ["si", "si", "si"] and syllables("新星") == ["xin", "xin"]
+    # a Taiwan reading heard as another character is accepted
+    assert syllable_match("我和你", "我汗你", syllables, TAIWAN_READINGS) == 1
+    assert syllable_match("液體", "一体", syllables, TAIWAN_READINGS) == 1
+    assert syllable_match("我和你", "我看你", syllables, TAIWAN_READINGS) < 1
 
 
 def test_load_sentences_skips_comments_and_blanks(tmp_path):
@@ -155,7 +174,7 @@ def test_evaluate_records_each_take_and_summary_counts_bad_ones():
     ticks = iter(range(100))
     records = evaluate(
         synthesize, ["今天天氣真好。", "我們去散步吧。"], [0, 1], {"fake": transcribe}, embed,
-        reference_embedding=np.array([1.0, 0.0], dtype=np.float32), unify_script=same, to_syllables=list,
+        reference_embedding=np.array([1.0, 0.0], dtype=np.float32), unify_script=same, to_syllables=list, syllable_variants=frozenset(),
         save_wav=lambda name, audio, rate: saved.__setitem__(name, audio),
         clock=lambda: float(next(ticks)), log=lambda _: None,
     )
