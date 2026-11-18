@@ -7,6 +7,9 @@ import sys
 from pathlib import Path
 
 
+MIN_SILENCE = 0.10  # shortest silence considered when looking for pauses
+
+
 def _log(msg: str) -> None:
     print(msg, file=sys.stderr, flush=True)
 
@@ -102,7 +105,11 @@ def _train(args) -> int:
 
 def _check(args) -> int:
     from breezyvoice.pronunciation import model
+    from breezyvoice.audio import pauses as silences
+    from breezyvoice.pronunciation.align import stray_units, syllable_times
     from breezyvoice.pronunciation.check import score
+    from breezyvoice.pronunciation.model import SAMPLE_RATE
+    from breezyvoice.pronunciation.pauses import place, unnatural
     from breezyvoice.pronunciation.readings import Unsupported
 
     recognizer = model.load(args.model)
@@ -116,13 +123,21 @@ def _check(args) -> int:
         except Unsupported as e:
             print(json.dumps({"wav": entry["wav"], "text": entry["text"], "unsupported": str(e)}, ensure_ascii=False))
             continue
-        syllables = score(recognizer.log_probs(_load_audio(entry["wav"])), reading.readings, reading.others,
-                          recognizer.unit_index)
+        audio_16k = _load_audio(entry["wav"])
+        log_probs = recognizer.log_probs(audio_16k)
+        syllables = score(log_probs, reading.readings, reading.others, recognizer.unit_index)
         ranked = sorted(syllables, key=lambda s: s.margin)
+        times = syllable_times(log_probs, reading.readings, recognizer.unit_index)
+        before, after = stray_units(log_probs, times, recognizer.vocabulary)
+        placed = place(silences(audio_16k.numpy(), SAMPLE_RATE, MIN_SILENCE), times, reading.positions, reading.spoken)
+        odd = unnatural(placed)
         print(json.dumps({
             "wav": entry["wav"], "text": entry["text"], "lowest_margin": round(ranked[0].margin, 2),
             "doubtful": [{"character": reading.characters[s.index], "position": s.index, "intended": s.reading,
                           "rival": s.rival, "margin": round(s.margin, 2)} for s in ranked[:3]],
+            "extra_before": before, "extra_after": after,
+            "unnatural_pauses": [{"after": reading.characters[p.after], "position": p.after, "seconds": round(p.length, 2),
+                                  "at_punctuation": p.at_punctuation} for p in odd],
         }, ensure_ascii=False), flush=True)
     return 0
 

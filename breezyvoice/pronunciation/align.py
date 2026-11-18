@@ -69,3 +69,23 @@ def syllable_times(log_probs: torch.Tensor, readings: Sequence[str], unit_index:
         times.append((first * FRAME_SECONDS, (last + 1) * FRAME_SECONDS))
         position += len(group)
     return times
+
+
+def stray_units(log_probs: torch.Tensor, syllables: Sequence[tuple[float, float]], vocabulary: Sequence[str],
+                blank: int = 0) -> tuple[list[str], list[str]]:
+    """Units the recogniser hears before the first and after the last syllable of the text.
+
+    A take sometimes starts or ends with a syllable or two that the text does not contain. They sit
+    outside the aligned sentence, where anything recognised is by definition not part of it.
+    """
+    def heard(frames: torch.Tensor) -> list[str]:
+        out, previous = [], blank
+        for i in frames.argmax(dim=-1).tolist() if frames.numel() else []:
+            if i != previous and i != blank:
+                out.append(vocabulary[i])
+            previous = i
+        return out
+
+    first = max(0, int(round(syllables[0][0] / FRAME_SECONDS)) - 1)
+    last = int(round(syllables[-1][1] / FRAME_SECONDS)) + 1
+    return heard(log_probs[:first]), heard(log_probs[last:])

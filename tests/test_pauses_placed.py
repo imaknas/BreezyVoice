@@ -3,7 +3,7 @@ import numpy as np
 import pytest
 import torch
 
-from breezyvoice.pronunciation.align import FRAME_SECONDS, syllable_times, unit_frames
+from breezyvoice.pronunciation.align import FRAME_SECONDS, stray_units, syllable_times, unit_frames
 from breezyvoice.pronunciation.pauses import Limits, Pause, place, tidy, unnatural
 
 VOCAB = ["<blank>", "ㄊ", "ㄧㄠ2", "ㄉ", "ㄚ4", "ㄧ1"]
@@ -77,3 +77,14 @@ def test_tidy_shortens_only_the_unnatural_pauses_and_keeps_the_speech():
     assert np.array_equal(out[:int(0.5 * rate)], audio[:int(0.5 * rate)])  # speech before the first cut is untouched
     assert np.array_equal(out[-int(0.4 * rate):], audio[-int(0.4 * rate):])
     assert tidy(audio, rate, [pauses[0]]).shape == audio.shape  # an ordinary comma pause is left alone
+
+
+def test_stray_units_are_what_is_heard_outside_the_sentence():
+    lp = _frames(["ㄧ1", "_", "_", "ㄊ", "ㄧㄠ2", "_", "ㄉ", "ㄚ4", "_", "_", "ㄉ", "ㄚ4", "_"])
+    readings = ["ㄊㄧㄠ2", "ㄉㄚ4"]
+    assert syllable_times(lp, readings, INDEX)[0][0] == pytest.approx(3 * FRAME_SECONDS)
+    # the alignment may take either ㄉㄚ4 as the sentence's; whichever it leaves out is stray
+    before, after = stray_units(lp, [(3 * FRAME_SECONDS, 5 * FRAME_SECONDS), (6 * FRAME_SECONDS, 8 * FRAME_SECONDS)], VOCAB)
+    assert before == ["ㄧ1"] and after == ["ㄉ", "ㄚ4"]
+    clean = _frames(["_", "ㄊ", "ㄧㄠ2", "_", "ㄉ", "ㄚ4", "_"])
+    assert stray_units(clean, syllable_times(clean, readings, INDEX), VOCAB) == ([], [])
