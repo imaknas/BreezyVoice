@@ -11,6 +11,9 @@ from typing import Sequence
 
 import numpy as np
 
+# Marks that announce or separate, after which a listener expects a beat even in quick speech.
+STRONG_MARKS = frozenset("：:；;—…")
+
 
 @dataclass(frozen=True)
 class Pause:
@@ -25,11 +28,24 @@ class Pause:
 
 
 @dataclass(frozen=True)
+class Missing:
+    """A place where the text calls for a pause and the take has none, or too short a one."""
+    after: int  # index of the syllable it should follow
+    at: float  # where in the audio to add silence, seconds
+    seconds: float  # how much to add
+
+
+@dataclass(frozen=True)
 class Limits:
     # Calibrated on fifty takes a listener marked: with these values the rule agreed with him on
     # eleven of the fifteen takes he found unnatural and on thirty-two of the thirty-five he did not.
     unmarked: float = 0.14  # a silence this long where the text has no punctuation is heard as a break
     at_punctuation: float = 0.50  # longer than this at a comma is heard as dragging
+    after_strong_mark: float = 0.22  # a colon or semicolon run straight through is heard as rushed
+
+
+def _between(spoken: str, positions: Sequence[int], boundary: int) -> str:
+    return spoken[positions[boundary] + 1: positions[boundary + 1]]
 
 
 def place(silences: Sequence[tuple[float, float]], syllables: Sequence[tuple[float, float]],
@@ -54,8 +70,7 @@ def place(silences: Sequence[tuple[float, float]], syllables: Sequence[tuple[flo
             merged[boundary] = [start, end]
     pauses = []
     for boundary, (start, end) in sorted(merged.items()):
-        between = spoken[positions[boundary] + 1: positions[boundary + 1]]
-        marked = any(not ch.isalnum() and not ch.isspace() for ch in between)
+        marked = any(not ch.isalnum() and not ch.isspace() for ch in _between(spoken, positions, boundary))
         pauses.append(Pause(start, end, boundary, marked))
     return pauses
 
@@ -67,25 +82,67 @@ def unnatural(pauses: Sequence[Pause], limits: Limits = Limits()) -> list[Pause]
             or (not p.at_punctuation and p.length >= limits.unmarked)]
 
 
+def missing(audio: np.ndarray, sample_rate: int, pauses: Sequence[Pause], syllables: Sequence[tuple[float, float]],
+            positions: Sequence[int], spoken: str, limits: Limits = Limits()) -> list[Missing]:
+    """Strong marks spoken with no pause, or one shorter than ``limits.after_strong_mark``.
+
+    The silence is to be added inside the existing pause if there is one, and otherwise at the
+    quietest moment between the two syllables.
+    """
+    existing = {p.after: p for p in pauses}
+    out = []
+    for boundary in range(len(syllables) - 1):
+        if not STRONG_MARKS & set(_between(spoken, positions, boundary)):
+            continue
+        pause = existing.get(boundary)
+        have = pause.length if pause else 0.0
+        if have >= limits.after_strong_mark:
+            continue
+        if pause:
+            at = (pause.start + pause.end) / 2
+        else:
+            a = int(sum(syllables[boundary]) / 2 * sample_rate)
+            b = int(sum(syllables[boundary + 1]) / 2 * sample_rate)
+            frame = max(1, int(0.02 * sample_rate))
+            starts = range(a, max(a + 1, b - frame), frame)
+            quietest = min(starts, key=lambda s: float(np.mean(audio[s:s + frame] ** 2)))
+            at = (quietest + frame / 2) / sample_rate
+        out.append(Missing(boundary, at, limits.after_strong_mark - have))
+    return out
+
+
 def tidy(audio: np.ndarray, sample_rate: int, pauses: Sequence[Pause], limits: Limits = Limits(),
-         unmarked_to: float = 0.04, punctuation_to: float = 0.32, fade: float = 0.008) -> np.ndarray:
-    """Shorten the pauses ``unnatural`` would report: those in mid-phrase to almost nothing, those that
-    drag at punctuation to an ordinary length. The cut is taken from the middle of the silence and the
-    two sides are crossfaded, so no speech is touched."""
-    cuts = []
+         add: Sequence[Missing] = (), unmarked_to: float = 0.04, punctuation_to: float = 0.32,
+         fade: float = 0.008) -> np.ndarray:
+    """Shorten the pauses ``unnatural`` would report and add the ones in ``add``.
+
+    Pauses in mid-phrase go down to almost nothing, those that drag at punctuation to an ordinary
+    length; the cut is taken from the middle of the silence and the two sides are crossfaded, so no
+    speech is touched. An added pause fades the sound out and back in around the silence.
+    """
+    n = int(fade * sample_rate)
+    edits: list[tuple[float, str, float]] = []  # (time, kind, cut end or seconds to add)
     for pause in unnatural(pauses, limits):
         keep = punctuation_to if pause.at_punctuation else unmarked_to
-        if pause.length <= keep + 2 * fade:
-            continue
-        cuts.append((pause.start + keep / 2, pause.end - keep / 2))
+        if pause.length > keep + 2 * fade:
+            edits.append((pause.start + keep / 2, "cut", pause.end - keep / 2))
+    edits += [(m.at, "add", m.seconds) for m in add]
     out, position = [], 0
-    n = int(fade * sample_rate)
     ramp = np.linspace(1.0, 0.0, n, dtype=np.float32)
-    for start, end in sorted(cuts):
-        a, b = int(start * sample_rate), int(end * sample_rate)
+    for time, kind, value in sorted(edits):
+        a = int(time * sample_rate)
+        if a - position < n:
+            continue  # too close to the previous edit to fade
         head = audio[position:a].astype(np.float32, copy=True)
-        head[-n:] = head[-n:] * ramp + audio[b:b + n] * (1 - ramp)
-        out.append(head)
-        position = b + n
+        if kind == "cut":
+            b = int(value * sample_rate)
+            head[-n:] = head[-n:] * ramp + audio[b:b + n] * (1 - ramp)
+            out.append(head)
+            position = b + n
+        else:
+            head[-n:] *= ramp
+            tail = audio[a:a + n].astype(np.float32, copy=True) * ramp[::-1]
+            out += [head, np.zeros(int(value * sample_rate), dtype=np.float32), tail]
+            position = a + n
     out.append(audio[position:])
     return np.concatenate(out)

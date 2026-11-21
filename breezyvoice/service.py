@@ -83,6 +83,8 @@ def _report(review) -> dict:
         "extra_after": list(review.extra_after),
         "unnatural_pauses": [{"after": review.characters[p.after], "position": p.after, "seconds": round(p.length, 2),
                               "at_punctuation": p.at_punctuation} for p in review.unnatural_pauses],
+        "missing_pauses": [{"after": review.characters[m.after], "position": m.after, "seconds": round(m.seconds, 2)}
+                           for m in review.missing_pauses],
     }
 
 
@@ -91,7 +93,8 @@ def handle(engine: BreezyVoice, payload: object, reviewer=None) -> dict:
 
     With a ``reviewer`` (``breezyvoice.pronunciation.review.Reviewer``) the take is checked against its
     text: the response reports wrong readings and stray sounds, which only another seed can fix, and
-    unnatural pauses, which are shortened in the audio unless the request says ``tidy_pauses: false``.
+    unnatural pauses and pauses missing after a colon or semicolon, which are mended in the audio unless
+    the request says ``tidy_pauses: false``.
     """
     try:
         req = Request.from_json(payload)
@@ -106,7 +109,7 @@ def handle(engine: BreezyVoice, payload: object, reviewer=None) -> dict:
                 report = {"unsupported": str(e)}
             else:
                 report = _report(review)
-                report["tidied"] = bool(req.tidy_pauses and review.unnatural_pauses)
+                report["tidied"] = bool(req.tidy_pauses and (review.unnatural_pauses or review.missing_pauses))
                 if report["tidied"]:
                     result = Synthesis(audio=reviewer.tidy(result.audio, result.sample_rate, review),
                                        sample_rate=result.sample_rate, text=result.text)

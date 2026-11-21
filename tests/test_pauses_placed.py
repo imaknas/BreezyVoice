@@ -4,7 +4,7 @@ import pytest
 import torch
 
 from breezyvoice.pronunciation.align import FRAME_SECONDS, stray_units, syllable_times, unit_frames
-from breezyvoice.pronunciation.pauses import Limits, Pause, place, tidy, unnatural
+from breezyvoice.pronunciation.pauses import Limits, Missing, Pause, missing, place, tidy, unnatural
 
 VOCAB = ["<blank>", "ㄊ", "ㄧㄠ2", "ㄉ", "ㄚ4", "ㄧ1"]
 INDEX = {u: i for i, u in enumerate(VOCAB)}
@@ -88,3 +88,68 @@ def test_stray_units_are_what_is_heard_outside_the_sentence():
     assert before == ["ㄧ1"] and after == ["ㄉ", "ㄚ4"]
     clean = _frames(["_", "ㄊ", "ㄧㄠ2", "_", "ㄉ", "ㄚ4", "_"])
     assert stray_units(clean, syllable_times(clean, readings, INDEX), VOCAB) == ([], [])
+
+
+# 「試試：在哪」: four spoken characters at positions 0 1 3 4
+COLON, COLON_POS = "試試：在哪", [0, 1, 3, 4]
+COLON_SYL = [(0.0, 0.2), (0.2, 0.4), (0.4, 0.6), (0.6, 0.8)]
+
+
+def _speech_with_dip(rate=16000):
+    """0.8 s of noise with a quieter stretch from 0.38 to 0.42 s."""
+    rng = np.random.default_rng(1)
+    audio = (0.2 * rng.standard_normal(int(rate * 0.8))).astype(np.float32)
+    audio[int(0.38 * rate):int(0.42 * rate)] *= 0.05
+    return audio, rate
+
+
+def test_missing_finds_a_colon_spoken_straight_through_and_picks_the_quietest_moment():
+    audio, rate = _speech_with_dip()
+    (lack,) = missing(audio, rate, [], COLON_SYL, COLON_POS, COLON, Limits(after_strong_mark=0.22))
+    assert lack.after == 1 and lack.seconds == pytest.approx(0.22)
+    assert 0.37 <= lack.at <= 0.43
+
+
+def test_missing_tops_up_a_short_pause_and_accepts_a_long_enough_one():
+    audio, rate = _speech_with_dip()
+    short = [Pause(0.36, 0.44, 1, True)]
+    (lack,) = missing(audio, rate, short, COLON_SYL, COLON_POS, COLON, Limits(after_strong_mark=0.22))
+    assert lack.at == pytest.approx(0.40) and lack.seconds == pytest.approx(0.14)
+    assert missing(audio, rate, [Pause(0.3, 0.55, 1, True)], COLON_SYL, COLON_POS, COLON) == []
+    # a comma is not a strong mark
+    assert missing(audio, rate, [], SYLLABLES, POSITIONS, SPOKEN) == []
+
+
+def test_tidy_adds_the_missing_pause_as_silence():
+    audio, rate = _speech_with_dip()
+    out = tidy(audio, rate, [], add=[Missing(1, 0.40, 0.22)])
+    assert len(out) / rate == pytest.approx(0.8 + 0.22, abs=0.02)
+    added = out[int(0.42 * rate):int(0.60 * rate)]
+    assert np.all(added == 0)
+    assert np.array_equal(out[:int(0.3 * rate)], audio[:int(0.3 * rate)])
+    assert np.array_equal(out[-int(0.3 * rate):], audio[-int(0.3 * rate):])
+
+
+def test_reviewer_puts_the_pieces_together():
+    """A stand-in recogniser whose posteriors say 調大 with a stray ㄧ1 at the end, 20 ms per frame."""
+    from types import SimpleNamespace
+
+    from breezyvoice.pronunciation.readings import Reading, Unsupported
+    from breezyvoice.pronunciation.review import Reviewer
+
+    pattern = ["_"] * 5 + ["ㄊ", "ㄧㄠ2"] + ["_"] * 20 + ["ㄉ", "ㄚ4"] + ["_"] * 5 + ["ㄧ1"] + ["_"] * 3
+    recognizer = SimpleNamespace(unit_index=INDEX, vocabulary=VOCAB, log_probs=lambda audio: _frames(pattern))
+    reading = Reading(("調", "大"), ("ㄊㄧㄠ2", "ㄉㄚ4"), ((), ()), "調大。", (0, 1))
+    rate = 16000
+    rng = np.random.default_rng(0)
+    audio = (0.2 * rng.standard_normal(len(pattern) * 320)).astype(np.float32)
+    audio[8 * 320:26 * 320] = 0  # silence between the two syllables
+    reviewer = Reviewer(recognizer, lambda text: reading, lambda a, sr: a)
+    review = reviewer.review(audio, rate, "調大。")
+    assert review.extra_after == ("ㄧ1",) and review.extra_before == () and review.needs_retake
+    assert [(p.after, p.at_punctuation) for p in review.unnatural_pauses] == [(0, False)]
+    assert len(reviewer.tidy(audio, rate, review)) < len(audio)
+
+    unknown = Reading(("好",), ("ㄏㄠ3",), ((),), "好", (0,))
+    with pytest.raises(Unsupported):
+        Reviewer(recognizer, lambda text: unknown, lambda a, sr: a).review(audio, rate, "好")

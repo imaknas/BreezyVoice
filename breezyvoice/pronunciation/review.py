@@ -10,7 +10,7 @@ import torch
 from breezyvoice.audio import pauses as silences
 from breezyvoice.pronunciation.align import stray_units, syllable_times
 from breezyvoice.pronunciation.check import score
-from breezyvoice.pronunciation.pauses import Limits, Pause, place, tidy, unnatural
+from breezyvoice.pronunciation.pauses import Limits, Missing, Pause, missing, place, tidy, unnatural
 from breezyvoice.pronunciation.readings import Reading, Unsupported
 from breezyvoice.pronunciation.units import flatten
 
@@ -38,6 +38,7 @@ class Review:
     extra_after: tuple[str, ...]  # ... and after it ends
     pauses: tuple[Pause, ...]
     unnatural_pauses: tuple[Pause, ...]
+    missing_pauses: tuple[Missing, ...] = ()  # strong marks spoken without a pause
 
     @property
     def needs_retake(self) -> bool:
@@ -62,9 +63,9 @@ class Reviewer:
         """Raises ``Unsupported`` for text the recogniser has no units for."""
         reading = self._read(text)
         index = self._recognizer.unit_index
-        missing = [u for u in flatten(reading.readings) if u not in index]
-        if missing:
-            raise Unsupported(f"the recogniser has no unit for {missing[0]}")
+        unknown = [u for u in flatten(reading.readings) if u not in index]
+        if unknown:
+            raise Unsupported(f"the recogniser has no unit for {unknown[0]}")
         log_probs = self._recognizer.log_probs(self._to_16k(audio, sample_rate))
         wrong = tuple(
             WrongReading(reading.characters[s.index], s.index, s.reading, s.rival, s.margin)
@@ -73,9 +74,11 @@ class Reviewer:
         times = syllable_times(log_probs, reading.readings, index)
         before, after = stray_units(log_probs, times, self._recognizer.vocabulary)
         placed = tuple(place(silences(audio, sample_rate, MIN_SILENCE), times, reading.positions, reading.spoken))
+        lacking = missing(audio, sample_rate, placed, times, reading.positions, reading.spoken, self._limits)
         return Review(reading.characters, wrong, tuple(before), tuple(after), placed,
-                      tuple(unnatural(placed, self._limits)))
+                      tuple(unnatural(placed, self._limits)), tuple(lacking))
 
     def tidy(self, audio: np.ndarray, sample_rate: int, review: Review) -> np.ndarray:
-        """The take with its unnatural pauses shortened; the speech itself is untouched."""
-        return tidy(audio, sample_rate, review.pauses, self._limits)
+        """The take with its unnatural pauses shortened and its missing ones added; the speech itself
+        is untouched."""
+        return tidy(audio, sample_rate, review.pauses, self._limits, add=review.missing_pauses)
