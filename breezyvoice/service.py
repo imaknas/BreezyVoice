@@ -83,8 +83,8 @@ def _report(review) -> dict:
         "extra_after": list(review.extra_after),
         "unnatural_pauses": [{"after": review.characters[p.after], "position": p.after, "seconds": round(p.length, 2),
                               "at_punctuation": p.at_punctuation} for p in review.unnatural_pauses],
-        "missing_pauses": [{"after": review.characters[m.after], "position": m.after, "seconds": round(m.seconds, 2)}
-                           for m in review.missing_pauses],
+        "missing_pauses": [{"after": review.characters[m.after], "position": m.after, "seconds": round(m.seconds, 2),
+                            "can_add": m.at is not None} for m in review.missing_pauses],
     }
 
 
@@ -109,7 +109,8 @@ def handle(engine: BreezyVoice, payload: object, reviewer=None) -> dict:
                 report = {"unsupported": str(e)}
             else:
                 report = _report(review)
-                report["tidied"] = bool(req.tidy_pauses and (review.unnatural_pauses or review.missing_pauses))
+                report["tidied"] = bool(req.tidy_pauses and (review.unnatural_pauses
+                                                              or any(m.at is not None for m in review.missing_pauses)))
                 if report["tidied"]:
                     result = Synthesis(audio=reviewer.tidy(result.audio, result.sample_rate, review),
                                        sample_rate=result.sample_rate, text=result.text)

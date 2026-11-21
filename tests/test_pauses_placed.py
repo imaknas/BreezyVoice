@@ -153,3 +153,18 @@ def test_reviewer_puts_the_pieces_together():
     unknown = Reading(("好",), ("ㄏㄠ3",), ((),), "好", (0,))
     with pytest.raises(Unsupported):
         Reviewer(recognizer, lambda text: unknown, lambda a, sr: a).review(audio, rate, "好")
+
+
+def test_missing_does_not_place_a_pause_where_the_sound_never_dips():
+    rate = 16000
+    rng = np.random.default_rng(2)
+    steady = (0.2 * rng.standard_normal(int(rate * 0.8))).astype(np.float32)
+    (lack,) = missing(steady, rate, [], COLON_SYL, COLON_POS, COLON)
+    assert lack.at is None and lack.seconds == pytest.approx(0.22)
+    assert tidy(steady, rate, [], add=[lack]).shape == steady.shape  # nothing is cut into
+
+
+def test_dashes_join_and_other_ellipsis_characters_count():
+    audio, rate = _speech_with_dip()
+    assert missing(audio, rate, [], COLON_SYL, [0, 1, 3, 4], "台北—高雄") == []
+    assert len(missing(audio, rate, [], COLON_SYL, [0, 1, 4, 5], "等等⋯⋯你說")) == 1

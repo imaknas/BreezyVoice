@@ -11,8 +11,14 @@ from typing import Sequence
 
 import numpy as np
 
-# Marks that announce or separate, after which a listener expects a beat even in quick speech.
-STRONG_MARKS = frozenset("：:；;—…")
+# Marks that announce or separate, after which a listener expects a beat even in quick speech. Dashes
+# are left out: between two names or numbers they join rather than separate, and the two uses cannot be
+# told apart from the text alone.
+STRONG_MARKS = frozenset("：:；;…⋯")
+# Without an existing pause, silence is only added where the sound dips at least this far below the
+# louder of the two syllables. With no dip there, the syllables run into each other, or the alignment
+# is off, and a cut would land inside a word.
+MIN_DIP_DB = 10.0
 
 
 @dataclass(frozen=True)
@@ -31,8 +37,8 @@ class Pause:
 class Missing:
     """A place where the text calls for a pause and the take has none, or too short a one."""
     after: int  # index of the syllable it should follow
-    at: float  # where in the audio to add silence, seconds
-    seconds: float  # how much to add
+    at: float | None  # where in the audio to add silence, seconds; None when no safe place was found
+    seconds: float  # how much is lacking
 
 
 @dataclass(frozen=True)
@@ -87,7 +93,7 @@ def missing(audio: np.ndarray, sample_rate: int, pauses: Sequence[Pause], syllab
     """Strong marks spoken with no pause, or one shorter than ``limits.after_strong_mark``.
 
     The silence is to be added inside the existing pause if there is one, and otherwise at the
-    quietest moment between the two syllables.
+    quietest moment between the two syllables, provided the sound really dips there.
     """
     existing = {p.after: p for p in pauses}
     out = []
@@ -104,9 +110,11 @@ def missing(audio: np.ndarray, sample_rate: int, pauses: Sequence[Pause], syllab
             a = int(sum(syllables[boundary]) / 2 * sample_rate)
             b = int(sum(syllables[boundary + 1]) / 2 * sample_rate)
             frame = max(1, int(0.02 * sample_rate))
-            starts = range(a, max(a + 1, b - frame), frame)
-            quietest = min(starts, key=lambda s: float(np.mean(audio[s:s + frame] ** 2)))
-            at = (quietest + frame / 2) / sample_rate
+            levels = [(float(np.mean(audio[s:s + frame] ** 2)), s) for s in range(a, max(a + 1, b - frame), frame)]
+            quietest, start = min(levels)
+            loudest = max(level for level, _ in levels)
+            dip = 10 * np.log10((loudest + 1e-12) / (quietest + 1e-12))
+            at = (start + frame / 2) / sample_rate if dip >= MIN_DIP_DB else None
         out.append(Missing(boundary, at, limits.after_strong_mark - have))
     return out
 
@@ -126,7 +134,7 @@ def tidy(audio: np.ndarray, sample_rate: int, pauses: Sequence[Pause], limits: L
         keep = punctuation_to if pause.at_punctuation else unmarked_to
         if pause.length > keep + 2 * fade:
             edits.append((pause.start + keep / 2, "cut", pause.end - keep / 2))
-    edits += [(m.at, "add", m.seconds) for m in add]
+    edits += [(m.at, "add", m.seconds) for m in add if m.at is not None]
     out, position = [], 0
     ramp = np.linspace(1.0, 0.0, n, dtype=np.float32)
     for time, kind, value in sorted(edits):
