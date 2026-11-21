@@ -3,10 +3,10 @@ import numpy as np
 import pytest
 import torch
 
-from breezyvoice.pronunciation.align import FRAME_SECONDS, stray_units, syllable_times, unit_frames
+from breezyvoice.pronunciation.align import FRAME_SECONDS, repeated, stray_units, syllable_times, unit_frames
 from breezyvoice.pronunciation.pauses import Limits, Missing, Pause, missing, place, tidy, unnatural
 
-VOCAB = ["<blank>", "ㄊ", "ㄧㄠ2", "ㄉ", "ㄚ4", "ㄧ1"]
+VOCAB = ["<blank>", "ㄊ", "ㄧㄠ2", "ㄉ", "ㄚ4", "ㄧ1", "ㄧㄠ4", "ㄧ4"]
 INDEX = {u: i for i, u in enumerate(VOCAB)}
 
 
@@ -168,3 +168,31 @@ def test_dashes_join_and_other_ellipsis_characters_count():
     audio, rate = _speech_with_dip()
     assert missing(audio, rate, [], COLON_SYL, [0, 1, 3, 4], "台北—高雄") == []
     assert len(missing(audio, rate, [], COLON_SYL, [0, 1, 4, 5], "等等⋯⋯你說")) == 1
+
+
+def test_repeated_finds_a_syllable_said_twice_in_mid_sentence():
+    readings = ["ㄊㄧㄠ2", "ㄉㄚ4"]
+    twice = _frames(["_", "ㄊ", "ㄧㄠ2", "_", "ㄊ", "ㄧㄠ2", "_", "ㄉ", "ㄚ4", "_"])
+    (repeat,) = repeated(twice, readings, INDEX)
+    assert (repeat.first, repeat.count) == (0, 1) and repeat.at in (pytest.approx(FRAME_SECONDS), pytest.approx(4 * FRAME_SECONDS))
+    assert repeated(_frames(["_", "ㄊ", "ㄧㄠ2", "_", "ㄉ", "ㄚ4", "_"]), readings, INDEX) == []
+    # the text itself may say a syllable twice
+    assert repeated(twice, ["ㄊㄧㄠ2", "ㄊㄧㄠ2", "ㄉㄚ4"], INDEX) == []
+
+
+def test_repeated_covers_a_whole_word_and_a_changed_tone_but_not_other_extra_sounds():
+    readings = ["ㄊㄧㄠ2", "ㄉㄚ4"]
+    word = _frames(["ㄊ", "ㄧㄠ2", "ㄉ", "ㄚ4", "_", "ㄊ", "ㄧㄠ2", "ㄉ", "ㄚ4"])
+    assert [(r.first, r.count) for r in repeated(word, readings, INDEX)] == [(0, 2)]
+    other_tone = _frames(["ㄊ", "ㄧㄠ4", "_", "ㄊ", "ㄧㄠ2", "ㄉ", "ㄚ4"])
+    assert [(r.first, r.count) for r in repeated(other_tone, readings, INDEX)] == [(0, 1)]
+    # an extra sound that is not a neighbouring syllable, and half a syllable, are left alone
+    assert repeated(_frames(["ㄊ", "ㄧㄠ2", "_", "ㄧ1", "_", "ㄉ", "ㄚ4"]), readings, INDEX) == []
+    assert repeated(_frames(["ㄊ", "ㄧㄠ2", "_", "ㄉ", "_", "ㄉ", "ㄚ4"]), readings, INDEX) == []
+    # a bare final heard in two tones is one long vowel, not a repeat
+    assert repeated(_frames(["ㄧ4", "ㄧ1", "_", "ㄉ", "ㄚ4"]), ["ㄧ1", "ㄉㄚ4"], INDEX) == []
+
+
+def test_repeated_ignores_units_the_recogniser_is_unsure_of():
+    lp = _frames(["_", "ㄊ", "ㄧㄠ2", "_", "ㄊ", "ㄧㄠ2", "_", "ㄉ", "ㄚ4", "_"])
+    assert repeated(lp, ["ㄊㄧㄠ2", "ㄉㄚ4"], INDEX, min_probability=1.01) == []

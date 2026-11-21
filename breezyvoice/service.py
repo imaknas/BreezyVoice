@@ -81,6 +81,8 @@ def _report(review) -> dict:
                             "heard": w.heard, "margin": round(w.margin, 2)} for w in review.wrong_readings],
         "extra_before": list(review.extra_before),
         "extra_after": list(review.extra_after),
+        "repeated": [{"characters": "".join(review.characters[r.first:r.first + r.count]), "position": r.first,
+                      "at": round(r.at, 2)} for r in review.repeated],
         "unnatural_pauses": [{"after": review.characters[p.after], "position": p.after, "seconds": round(p.length, 2),
                               "at_punctuation": p.at_punctuation} for p in review.unnatural_pauses],
         "missing_pauses": [{"after": review.characters[m.after], "position": m.after, "seconds": round(m.seconds, 2),

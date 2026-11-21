@@ -8,7 +8,7 @@ import numpy as np
 import torch
 
 from breezyvoice.audio import pauses as silences
-from breezyvoice.pronunciation.align import stray_units, syllable_times
+from breezyvoice.pronunciation.align import Repeat, repeated, stray_units, syllable_times
 from breezyvoice.pronunciation.check import score
 from breezyvoice.pronunciation.pauses import Limits, Missing, Pause, missing, place, tidy, unnatural
 from breezyvoice.pronunciation.readings import Reading, Unsupported
@@ -39,11 +39,12 @@ class Review:
     pauses: tuple[Pause, ...]
     unnatural_pauses: tuple[Pause, ...]
     missing_pauses: tuple[Missing, ...] = ()  # strong marks spoken without a pause
+    repeated: tuple[Repeat, ...] = ()  # syllables said twice in a row where the text has them once
 
     @property
     def needs_retake(self) -> bool:
         """Something only another take can fix. Pauses are not counted: ``Reviewer.tidy`` mends them."""
-        return bool(self.wrong_readings or self.extra_before or self.extra_after)
+        return bool(self.wrong_readings or self.extra_before or self.extra_after or self.repeated)
 
 
 class Reviewer:
@@ -76,7 +77,8 @@ class Reviewer:
         placed = tuple(place(silences(audio, sample_rate, MIN_SILENCE), times, reading.positions, reading.spoken))
         lacking = missing(audio, sample_rate, placed, times, reading.positions, reading.spoken, self._limits)
         return Review(reading.characters, wrong, tuple(before), tuple(after), placed,
-                      tuple(unnatural(placed, self._limits)), tuple(lacking))
+                      tuple(unnatural(placed, self._limits)), tuple(lacking),
+                      tuple(repeated(log_probs, reading.readings, index)))
 
     def tidy(self, audio: np.ndarray, sample_rate: int, review: Review) -> np.ndarray:
         """The take with its unnatural pauses shortened and its missing ones added; the speech itself

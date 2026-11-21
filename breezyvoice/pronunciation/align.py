@@ -1,6 +1,8 @@
 """When each syllable of the intended text is spoken, from the recogniser's frame posteriors."""
 from __future__ import annotations
 
+import math
+from dataclasses import dataclass
 from typing import Mapping, Sequence
 
 import torch
@@ -71,6 +73,19 @@ def syllable_times(log_probs: torch.Tensor, readings: Sequence[str], unit_index:
     return times
 
 
+def heard_units(log_probs: torch.Tensor, blank: int = 0) -> list[tuple[int, int, float]]:
+    """(unit, first frame, probability there) of each unit on the frame-by-frame best path."""
+    out, previous = [], blank
+    if not log_probs.numel():
+        return out
+    best = log_probs.max(dim=-1)
+    for t, (i, value) in enumerate(zip(best.indices.tolist(), best.values.tolist())):
+        if i != previous and i != blank:
+            out.append((i, t, math.exp(value)))
+        previous = i
+    return out
+
+
 def stray_units(log_probs: torch.Tensor, syllables: Sequence[tuple[float, float]], vocabulary: Sequence[str],
                 blank: int = 0) -> tuple[list[str], list[str]]:
     """Units the recogniser hears before the first and after the last syllable of the text.
@@ -79,13 +94,96 @@ def stray_units(log_probs: torch.Tensor, syllables: Sequence[tuple[float, float]
     outside the aligned sentence, where anything recognised is by definition not part of it.
     """
     def heard(frames: torch.Tensor) -> list[str]:
-        out, previous = [], blank
-        for i in frames.argmax(dim=-1).tolist() if frames.numel() else []:
-            if i != previous and i != blank:
-                out.append(vocabulary[i])
-            previous = i
-        return out
+        return [vocabulary[i] for i, _, _ in heard_units(frames, blank)]
 
     first = max(0, int(round(syllables[0][0] / FRAME_SECONDS)) - 1)
     last = int(round(syllables[-1][1] / FRAME_SECONDS)) + 1
     return heard(log_probs[:first]), heard(log_probs[last:])
+
+
+@dataclass(frozen=True)
+class Repeat:
+    first: int  # the first syllable said twice, among the syllables of the text
+    count: int  # how many syllables in a row are said twice
+    at: float  # seconds, where the extra copy starts
+
+
+def _inserted(text: Sequence[str], heard: Sequence[str]) -> list[tuple[int, list[int]]]:
+    """Runs of ``heard`` that a shortest edit path leaves unmatched: (units of ``text`` before the
+    run, positions of the run in ``heard``)."""
+    n, m = len(text), len(heard)
+    cost = [[0] * (m + 1) for _ in range(n + 1)]
+    for i in range(n + 1):
+        cost[i][0] = i
+    for j in range(m + 1):
+        cost[0][j] = j
+    for i in range(1, n + 1):
+        for j in range(1, m + 1):
+            cost[i][j] = min(cost[i - 1][j - 1] + (text[i - 1] != heard[j - 1]), cost[i - 1][j] + 1, cost[i][j - 1] + 1)
+    before: dict[int, int] = {}
+    i, j = n, m
+    while i or j:
+        if i and j and cost[i][j] == cost[i - 1][j - 1] + (text[i - 1] != heard[j - 1]):
+            i, j = i - 1, j - 1
+        elif j and cost[i][j] == cost[i][j - 1] + 1:
+            before[j - 1] = i
+            j -= 1
+        else:
+            i -= 1
+    runs: list[tuple[int, list[int]]] = []
+    for j in sorted(before):
+        if runs and runs[-1][1][-1] == j - 1 and runs[-1][0] == before[j]:
+            runs[-1][1].append(j)
+        else:
+            runs.append((before[j], [j]))
+    return runs
+
+
+def _same_syllables(groups: Sequence[Sequence[str]], said: Sequence[str]) -> bool:
+    """Whether ``said`` is these syllables again. The tone of a syllable with an initial may differ,
+    as it does when a word is stumbled over; a bare final must match exactly, because one long vowel
+    is easily heard as the same vowel in two tones."""
+    position = 0
+    for group in groups:
+        now = said[position:position + len(group)]
+        position += len(group)
+        if len(group) == 1:
+            if list(now) != list(group):
+                return False
+        elif len(now) != 2 or now[0] != group[0] or now[1][:-1] != group[1][:-1]:
+            return False
+    return position == len(said)
+
+
+def repeated(log_probs: torch.Tensor, readings: Sequence[str], unit_index: Mapping[str, int],
+             min_probability: float = 0.5) -> list[Repeat]:
+    """Syllables of the text that are heard a second time right beside themselves (就就看 for 就看).
+
+    The forced alignment cannot show this: it gives the syllable both copies' frames. The best path
+    frame by frame can, since it carries the units twice. Only an extra run that spells out whole
+    neighbouring syllables counts, each unit heard with at least ``min_probability``; other extra
+    units are too often the recogniser wavering to be reported.
+    """
+    names = {i: unit for unit, i in unit_index.items()}
+    groups = [units(r) for r in readings]
+    starts, position = [], 0
+    for group in groups:
+        starts.append(position)
+        position += len(group)
+    heard = heard_units(log_probs)
+    said = [names[i] for i, _, _ in heard]
+    found = []
+    for before, run in _inserted([u for g in groups for u in g], said):
+        if min(heard[j][2] for j in run) < min_probability:
+            continue
+        extra = [said[j] for j in run]
+        for first in range(len(groups)):
+            count, length = 0, 0
+            while first + count < len(groups) and length < len(extra):
+                length += len(groups[first + count])
+                count += 1
+            beside = starts[first] == before or starts[first] + length == before
+            if length == len(extra) and beside and _same_syllables(groups[first:first + count], extra):
+                found.append(Repeat(first, count, heard[run[0]][1] * FRAME_SECONDS))
+                break
+    return found

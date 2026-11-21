@@ -256,15 +256,19 @@ With `--checker`, every take is reviewed and the result carries a `review`:
 {"needs_retake": true,
  "wrong_readings": [{"character": "調", "position": 14, "intended": "ㄊㄧㄠ2", "heard": "ㄉㄧㄠ4", "margin": -9.81}],
  "extra_before": [], "extra_after": [],
+ "repeated": [{"characters": "就", "position": 2, "at": 0.6}],
  "unnatural_pauses": [{"after": "物", "position": 3, "seconds": 0.16, "at_punctuation": false}],
  "tidied": true}
 ```
 
 - `wrong_readings`: characters whose sounds fit another of their dictionary readings clearly better.
 - `extra_before` / `extra_after`: sound units heard before the sentence starts or after it ends.
+- `repeated`: syllables said twice in a row where the text has them once (就就看 for 就看), with the time
+  of the extra copy. Of 39 takes synthesized from text with one character doubled it reported 31, and
+  none of 150 ordinary takes; other sounds added in mid-sentence are not reported.
 - `unnatural_pauses`: silences of 0.14 s or more where the text has no punctuation, and pauses longer
   than 0.50 s at punctuation. These are shortened in the audio (`"tidy_pauses": false` in the request
-  keeps them); the other two can only be fixed by another seed, which is what `needs_retake` says.
+  keeps them); the others can only be fixed by another seed, which is what `needs_retake` says.
 
 A review takes about 0.1 s for a five-second take on CPU. Text with Latin words is synthesized but not
 reviewed (`"review": {"unsupported": …}`).
