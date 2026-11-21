@@ -172,9 +172,9 @@ def test_dashes_join_and_other_ellipsis_characters_count():
 
 def test_repeated_finds_a_syllable_said_twice_in_mid_sentence():
     readings = ["ㄊㄧㄠ2", "ㄉㄚ4"]
-    twice = _frames(["_", "ㄊ", "ㄧㄠ2", "_", "ㄊ", "ㄧㄠ2", "_", "ㄉ", "ㄚ4", "_"])
+    twice = _frames(["_", "ㄊ", "ㄧㄠ2", "_", "_", "_", "ㄊ", "ㄧㄠ2", "_", "ㄉ", "ㄚ4", "_"])
     (repeat,) = repeated(twice, readings, INDEX)
-    assert (repeat.first, repeat.count) == (0, 1) and repeat.at in (pytest.approx(FRAME_SECONDS), pytest.approx(4 * FRAME_SECONDS))
+    assert (repeat.first, repeat.count) == (0, 1) and repeat.at in (pytest.approx(FRAME_SECONDS), pytest.approx(6 * FRAME_SECONDS))
     assert repeated(_frames(["_", "ㄊ", "ㄧㄠ2", "_", "ㄉ", "ㄚ4", "_"]), readings, INDEX) == []
     # the text itself may say a syllable twice
     assert repeated(twice, ["ㄊㄧㄠ2", "ㄊㄧㄠ2", "ㄉㄚ4"], INDEX) == []
@@ -182,9 +182,9 @@ def test_repeated_finds_a_syllable_said_twice_in_mid_sentence():
 
 def test_repeated_covers_a_whole_word_and_a_changed_tone_but_not_other_extra_sounds():
     readings = ["ㄊㄧㄠ2", "ㄉㄚ4"]
-    word = _frames(["ㄊ", "ㄧㄠ2", "ㄉ", "ㄚ4", "_", "ㄊ", "ㄧㄠ2", "ㄉ", "ㄚ4"])
+    word = _frames(["ㄊ", "ㄧㄠ2", "ㄉ", "ㄚ4", "_", "_", "ㄊ", "ㄧㄠ2", "ㄉ", "ㄚ4"])
     assert [(r.first, r.count) for r in repeated(word, readings, INDEX)] == [(0, 2)]
-    other_tone = _frames(["ㄊ", "ㄧㄠ4", "_", "ㄊ", "ㄧㄠ2", "ㄉ", "ㄚ4"])
+    other_tone = _frames(["ㄊ", "ㄧㄠ4", "_", "_", "_", "ㄊ", "ㄧㄠ2", "ㄉ", "ㄚ4"])
     assert [(r.first, r.count) for r in repeated(other_tone, readings, INDEX)] == [(0, 1)]
     # an extra sound that is not a neighbouring syllable, and half a syllable, are left alone
     assert repeated(_frames(["ㄊ", "ㄧㄠ2", "_", "ㄧ1", "_", "ㄉ", "ㄚ4"]), readings, INDEX) == []
@@ -193,6 +193,14 @@ def test_repeated_covers_a_whole_word_and_a_changed_tone_but_not_other_extra_sou
     assert repeated(_frames(["ㄧ4", "ㄧ1", "_", "ㄉ", "ㄚ4"]), ["ㄧ1", "ㄉㄚ4"], INDEX) == []
 
 
+def test_repeated_needs_the_two_copies_far_enough_apart_to_be_two_syllables():
+    held = _frames(["ㄧ1", "_", "ㄧ1", "_", "ㄉ", "ㄚ4"])  # 40 ms apart: one held vowel
+    assert repeated(held, ["ㄧ1", "ㄉㄚ4"], INDEX) == []
+    twice = _frames(["ㄧ1", "_", "_", "_", "_", "_", "ㄧ1", "_", "ㄉ", "ㄚ4"])  # 120 ms apart
+    assert [(r.first, r.count) for r in repeated(twice, ["ㄧ1", "ㄉㄚ4"], INDEX)] == [(0, 1)]
+
+
 def test_repeated_ignores_units_the_recogniser_is_unsure_of():
-    lp = _frames(["_", "ㄊ", "ㄧㄠ2", "_", "ㄊ", "ㄧㄠ2", "_", "ㄉ", "ㄚ4", "_"])
+    lp = _frames(["_", "ㄊ", "ㄧㄠ2", "_", "_", "_", "ㄊ", "ㄧㄠ2", "_", "ㄉ", "ㄚ4", "_"])
+    assert repeated(lp, ["ㄊㄧㄠ2", "ㄉㄚ4"], INDEX) != []
     assert repeated(lp, ["ㄊㄧㄠ2", "ㄉㄚ4"], INDEX, min_probability=1.01) == []

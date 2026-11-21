@@ -264,8 +264,9 @@ With `--checker`, every take is reviewed and the result carries a `review`:
 - `wrong_readings`: characters whose sounds fit another of their dictionary readings clearly better.
 - `extra_before` / `extra_after`: sound units heard before the sentence starts or after it ends.
 - `repeated`: syllables said twice in a row where the text has them once (就就看 for 就看), with the time
-  of the extra copy. Of 39 takes synthesized from text with one character doubled it reported 31, and
-  none of 150 ordinary takes; other sounds added in mid-sentence are not reported.
+  of the extra copy. Of 39 takes synthesized from text with one character doubled it reported 30, and
+  one of 744 ordinary takes, where a listener heard an added word. A syllable without an initial said
+  twice (一一) is usually missed, and other sounds added in mid-sentence are not reported.
 - `unnatural_pauses`: silences of 0.14 s or more where the text has no punctuation, and pauses longer
   than 0.50 s at punctuation. These are shortened in the audio (`"tidy_pauses": false` in the request
   keeps them); the others can only be fixed by another seed, which is what `needs_retake` says.

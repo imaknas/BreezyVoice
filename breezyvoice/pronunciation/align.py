@@ -156,13 +156,15 @@ def _same_syllables(groups: Sequence[Sequence[str]], said: Sequence[str]) -> boo
 
 
 def repeated(log_probs: torch.Tensor, readings: Sequence[str], unit_index: Mapping[str, int],
-             min_probability: float = 0.5) -> list[Repeat]:
+             min_probability: float = 0.5, min_apart: float = 0.1) -> list[Repeat]:
     """Syllables of the text that are heard a second time right beside themselves (就就看 for 就看).
 
     The forced alignment cannot show this: it gives the syllable both copies' frames. The best path
     frame by frame can, since it carries the units twice. Only an extra run that spells out whole
     neighbouring syllables counts, each unit heard with at least ``min_probability``; other extra
-    units are too often the recogniser wavering to be reported.
+    units are too often the recogniser wavering to be reported. The two copies must also start at
+    least ``min_apart`` seconds from each other: a held vowel is sometimes heard as the same unit
+    twice a few frames apart, which is too close together to be two syllables.
     """
     names = {i: unit for unit, i in unit_index.items()}
     groups = [units(r) for r in readings]
@@ -182,8 +184,17 @@ def repeated(log_probs: torch.Tensor, readings: Sequence[str], unit_index: Mappi
             while first + count < len(groups) and length < len(extra):
                 length += len(groups[first + count])
                 count += 1
-            beside = starts[first] == before or starts[first] + length == before
-            if length == len(extra) and beside and _same_syllables(groups[first:first + count], extra):
+            if length != len(extra) or not _same_syllables(groups[first:first + count], extra):
+                continue
+            if starts[first] == before:  # the copy that was kept follows the extra one
+                other = run[-1] + 1
+            elif starts[first] + length == before:  # ... or comes before it
+                other = run[0] - length
+            else:
+                continue
+            if not 0 <= other < len(heard):
+                continue
+            if abs(heard[other][1] - heard[run[0]][1]) * FRAME_SECONDS >= min_apart:
                 found.append(Repeat(first, count, heard[run[0]][1] * FRAME_SECONDS))
                 break
     return found
