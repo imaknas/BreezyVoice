@@ -20,6 +20,9 @@ BAD_TAKE_CER = 0.1
 RETAKE_SYLLABLE_MATCH = 0.97
 
 Synthesize = Callable[[str, int], tuple[np.ndarray, int]]  # (text, seed) -> (mono float32 audio, sample rate)
+# (audio, sample rate, text) -> what a check of the take against its text found; "needs_retake" says
+# whether a listener would object, {"unsupported": reason} that the text could not be checked.
+Review = Callable[[np.ndarray, int, str], dict]
 
 
 def load_sentences(path: Path) -> list[str]:
@@ -54,8 +57,9 @@ def evaluate(synthesize: Synthesize, sentences: Sequence[str], seeds: Sequence[i
              syllable_variants: Collection[tuple[str, str]],
              save_wav: Callable[[str, np.ndarray, int], None],
              clock: Callable[[], float] = time.perf_counter,
-             log: Callable[[str], None] = print) -> list[dict]:
-    """One record per (sentence, seed)."""
+             log: Callable[[str], None] = print,
+             review: Review | None = None) -> list[dict]:
+    """One record per (sentence, seed). The time a ``review`` takes is not part of the take's."""
     records = []
     for index, sentence in enumerate(sentences):
         for seed in seeds:
@@ -82,11 +86,38 @@ def evaluate(synthesize: Synthesize, sentences: Sequence[str], seeds: Sequence[i
             # A pause where the text has no punctuation breaks a phrase apart. Without word timings
             # the pauses cannot be placed, so only their surplus over the marked breaks is counted.
             record["unmarked_pauses"] = max(0, len(record["pauses"]) - marked_breaks(sentence))
+            if review is not None:
+                record["review"] = review(audio, sample_rate, sentence)
             records.append(record)
             worst = max(record["cer"].values())
             log(f"[{len(records)}/{len(sentences) * len(seeds)}] {name} {record['seconds']:.1f}s "
                 f"in {wall:.1f}s cer<={worst:.2f} sim={record['similarity']:.3f}")
     return records
+
+
+def summarize_reviews(records: Sequence[dict]) -> dict | None:
+    """How many takes each kind of finding touches; None when the takes were not reviewed.
+
+    ``needs_retake`` is the number a narration pipeline pays for: one more synthesis each.
+    """
+    reviews = [r["review"] for r in records if "review" in r]
+    if not reviews:
+        return None
+    checked = [v for v in reviews if "unsupported" not in v]
+
+    def takes(*kinds: str) -> int:
+        return sum(any(v.get(kind) for kind in kinds) for v in checked)
+
+    return {
+        "checked": len(checked),
+        "unsupported": len(reviews) - len(checked),
+        "needs_retake": takes("needs_retake"),
+        "wrong_readings": takes("wrong_readings"),
+        "repeated": takes("repeated"),
+        "extra_at_the_edges": takes("extra_before", "extra_after"),
+        "unnatural_pauses": takes("unnatural_pauses"),
+        "missing_pauses": takes("missing_pauses"),
+    }
 
 
 def summarize(records: Sequence[dict]) -> dict:
@@ -111,4 +142,5 @@ def summarize(records: Sequence[dict]) -> dict:
         "takes_with_unmarked_pauses": sum(r["unmarked_pauses"] > 0 for r in records),
         "clipped_takes": sum(r["clipped_fraction"] > 0 for r in records),
         "loud_endings": sum(r["tail_level_db"] > -10 for r in records),
+        "review": summarize_reviews(records),
     }

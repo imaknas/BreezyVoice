@@ -34,13 +34,17 @@ def add_parser(sub, model_args) -> None:
     r.add_argument("--label", default="", help="what this run stands for, e.g. a commit or a setting")
     model_args(r)
 
+    v = actions.add_parser("review", help="check the takes of a finished run against their text and add the findings to it")
+    v.add_argument("run", type=Path, help="directory of the run")
+    model_args(v)
+
     c = actions.add_parser("compare", help="pair two runs by sentence and seed and report the differences")
     c.add_argument("base", type=Path, help="directory of the run to compare against")
     c.add_argument("candidate", type=Path)
 
 
 def main(args) -> int:
-    return {"setup": _setup, "run": _run, "compare": _compare}[args.action](args)
+    return {"setup": _setup, "run": _run, "review": _review, "compare": _compare}[args.action](args)
 
 
 def _setup(args) -> int:
@@ -59,6 +63,46 @@ def _commit() -> str | None:
     except (OSError, subprocess.CalledProcessError):
         return None
     return out.stdout.strip()
+
+
+def _checked(args):
+    """``Review`` for the takes, from the sound-unit recogniser given with --checker; None without it."""
+    if args.checker is None:
+        return None
+    from breezyvoice.loader import reviewer
+    from breezyvoice.pronunciation.readings import Unsupported
+    from breezyvoice.pronunciation.review import report
+
+    check = reviewer(args.checker, weights_dir=args.weights_dir)
+
+    def review(audio, sample_rate: int, text: str) -> dict:
+        try:
+            return report(check.review(audio, sample_rate, text))
+        except Unsupported as e:
+            return {"unsupported": str(e)}
+
+    return review
+
+
+def _review(args) -> int:
+    import soundfile
+
+    from breezyvoice.evaluation.run import summarize
+
+    review = _checked(args)
+    if review is None:
+        _log("evaluate review needs --checker")
+        return 2
+    path = args.run / "result.json"
+    result = json.loads(path.read_text(encoding="utf-8"))
+    for record in result["records"]:
+        audio, sample_rate = soundfile.read(str(args.run / record["wav"]), dtype="float32")
+        record["review"] = review(audio, sample_rate, record["text"])
+    result["summary"] = summarize(result["records"])
+    result["meta"]["reviewed_with"] = _commit()
+    path.write_text(json.dumps(result, ensure_ascii=False, indent=1), encoding="utf-8")
+    print(json.dumps({"meta": result["meta"], "review": result["summary"]["review"]}, ensure_ascii=False, indent=1))
+    return 0
 
 
 def _run(args) -> int:
@@ -94,7 +138,7 @@ def _run(args) -> int:
     load_before = os.getloadavg()[0]
     records = evaluate(synthesize, load_sentences(args.sentences), args.seeds, transcribers, embed,
                        embed(reference, reference_rate), unify, models.taiwan_syllables(),
-                       models.TAIWAN_READINGS, save_wav, log=_log)
+                       models.TAIWAN_READINGS, save_wav, log=_log, review=_checked(args))
     result = {
         "meta": {
             "label": args.label, "commit": _commit(), "device": args.device, "sampler": args.sampler,

@@ -12,6 +12,7 @@ import soundfile
 from breezyvoice.audio import pauses
 from breezyvoice.engine import BreezyVoice, Synthesis
 from breezyvoice.pronunciation.readings import Unsupported
+from breezyvoice.pronunciation.review import report as review_report
 
 
 DEFAULT_MIN_PAUSE_S = 0.25
@@ -73,23 +74,6 @@ def write_wav(path: Path, result: Synthesis) -> None:
         raise
 
 
-def _report(review) -> dict:
-    """The review as callers see it: what needs another take, and where the pauses were."""
-    return {
-        "needs_retake": review.needs_retake,
-        "wrong_readings": [{"character": w.character, "position": w.position, "intended": w.intended,
-                            "heard": w.heard, "margin": round(w.margin, 2)} for w in review.wrong_readings],
-        "extra_before": list(review.extra_before),
-        "extra_after": list(review.extra_after),
-        "repeated": [{"characters": "".join(review.characters[r.first:r.first + r.count]), "position": r.first,
-                      "at": round(r.at, 2)} for r in review.repeated],
-        "unnatural_pauses": [{"after": review.characters[p.after], "position": p.after, "seconds": round(p.length, 2),
-                              "at_punctuation": p.at_punctuation} for p in review.unnatural_pauses],
-        "missing_pauses": [{"after": review.characters[m.after], "position": m.after, "seconds": round(m.seconds, 2),
-                            "can_add": m.at is not None} for m in review.missing_pauses],
-    }
-
-
 def handle(engine: BreezyVoice, payload: object, reviewer=None) -> dict:
     """Run one request; errors come back as {"ok": false, "error": ...} rather than raising.
 
@@ -110,7 +94,7 @@ def handle(engine: BreezyVoice, payload: object, reviewer=None) -> dict:
             except Unsupported as e:
                 report = {"unsupported": str(e)}
             else:
-                report = _report(review)
+                report = review_report(review)
                 report["tidied"] = bool(req.tidy_pauses and (review.unnatural_pauses
                                                               or any(m.at is not None for m in review.missing_pauses)))
                 if report["tidied"]:

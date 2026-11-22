@@ -197,6 +197,44 @@ def test_evaluate_records_each_take_and_summary_counts_bad_ones():
     assert summary["similarity_min"] == pytest.approx(records[1]["similarity"])
 
 
+def test_evaluate_keeps_each_take_s_review_and_summary_counts_the_findings():
+    synthesize, transcribe, embed = _fakes()
+    findings = iter([
+        {"needs_retake": True, "wrong_readings": [{"character": "天"}], "repeated": [], "extra_before": [], "extra_after": []},
+        {"needs_retake": True, "wrong_readings": [], "repeated": [{"characters": "氣"}], "extra_before": [], "extra_after": ["ㄧ1"]},
+        {"needs_retake": False, "wrong_readings": [], "repeated": [], "unnatural_pauses": [{"after": "去"}]},
+        {"unsupported": "no reading for 'S'"},
+    ])
+    seen = []
+
+    def review(audio, sample_rate, text):
+        seen.append(text)
+        return next(findings)
+
+    records = evaluate(
+        synthesize, ["今天天氣真好。", "我們去散步吧。"], [0, 1], {"fake": transcribe}, embed,
+        reference_embedding=np.array([1.0, 0.0], dtype=np.float32), unify_script=same, to_syllables=list,
+        syllable_variants=frozenset(), save_wav=lambda *a: None, clock=lambda: 0.0, log=lambda _: None, review=review,
+    )
+    assert seen == ["今天天氣真好。", "今天天氣真好。", "我們去散步吧。", "我們去散步吧。"]
+    assert records[3]["review"] == {"unsupported": "no reading for 'S'"}
+    assert summarize(records)["review"] == {
+        "checked": 3, "unsupported": 1, "needs_retake": 2, "wrong_readings": 1, "repeated": 1,
+        "extra_at_the_edges": 1, "unnatural_pauses": 1, "missing_pauses": 0}
+
+
+def test_compare_counts_takes_that_stop_or_start_needing_another():
+    def take(sentence, retake):
+        return {"sentence": sentence, "seed": 0, "cer": {"a": 0.0}, "similarity": 0.5, "wav": "x",
+                "review": {"unsupported": "x"} if retake is None else {"needs_retake": retake}}
+
+    audio = np.zeros(8, dtype=np.float32)
+    report = compare([take(0, True), take(1, False), take(2, True), take(3, None)],
+                     [take(0, False), take(1, True), take(2, True), take(3, False)],
+                     lambda b, c: (audio, audio, 16000), lambda a, b, rate: 0.0)
+    assert report["reviewed_retakes"] == {"pairs": 3, "base": 2, "candidate": 2, "no_longer": 1, "newly": 1}
+
+
 def test_measure_reference():
     audio = np.concatenate([np.full(RATE, 0.1, dtype=np.float32), np.full(RATE, 0.2, dtype=np.float32)])
     embed = lambda a, r: np.array([1.0, 0.0], dtype=np.float32)  # noqa: E731

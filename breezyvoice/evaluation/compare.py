@@ -32,7 +32,15 @@ def compare(base: Sequence[dict], candidate: Sequence[dict],
             "similarity_delta": c["similarity"] - b["similarity"],
         })
     distances = [r["mel_distance"] for r in rows if r["mel_distance"] is not None]
+    # Takes both runs could check: which of them stopped needing another take, and which started to.
+    both = [(b["review"], c["review"]) for b, c in pairs
+            if "needs_retake" in b.get("review", ()) and "needs_retake" in c.get("review", ())]
     return {
+        "reviewed_retakes": {"pairs": len(both),
+                    "base": sum(b["needs_retake"] for b, _ in both),
+                    "candidate": sum(c["needs_retake"] for _, c in both),
+                    "no_longer": sum(b["needs_retake"] and not c["needs_retake"] for b, c in both),
+                    "newly": sum(c["needs_retake"] and not b["needs_retake"] for b, c in both)} if both else None,
         "pairs": len(rows),
         "unpaired": len(candidate) - len(rows),
         "same_length": sum(r["same_length"] for r in rows),

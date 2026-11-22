@@ -191,6 +191,13 @@ breezyvoice evaluate run --ref-wav REF.wav --ref-text "…" --out RUNS/base --la
 breezyvoice evaluate compare RUNS/base RUNS/candidate
 ```
 
+With `--checker DATA/checker.pt` (see [Checking and mending takes](#checking-and-mending-takes)) every
+take is also reviewed against its text, and the summary counts the takes with each kind of finding;
+`needs_retake` is the share a narration pipeline would have to synthesize again. A finished run gets
+the same with `breezyvoice evaluate review RUNS/base --checker DATA/checker.pt`, and `compare` then
+reports how many takes stopped or started needing another (`reviewed_retakes`).
+
+
 Keep `--out` outside the repository: it holds every take as a wav next to `result.json`.
 
 Per take it records the character error rate against two recognisers of different families

@@ -47,6 +47,23 @@ class Review:
         return bool(self.wrong_readings or self.extra_before or self.extra_after or self.repeated)
 
 
+def report(review: Review) -> dict:
+    """The review as plain data: what needs another take, and where the pauses were."""
+    return {
+        "needs_retake": review.needs_retake,
+        "wrong_readings": [{"character": w.character, "position": w.position, "intended": w.intended,
+                            "heard": w.heard, "margin": round(w.margin, 2)} for w in review.wrong_readings],
+        "extra_before": list(review.extra_before),
+        "extra_after": list(review.extra_after),
+        "repeated": [{"characters": "".join(review.characters[r.first:r.first + r.count]), "position": r.first,
+                      "at": round(r.at, 2)} for r in review.repeated],
+        "unnatural_pauses": [{"after": review.characters[p.after], "position": p.after, "seconds": round(p.length, 2),
+                              "at_punctuation": p.at_punctuation} for p in review.unnatural_pauses],
+        "missing_pauses": [{"after": review.characters[m.after], "position": m.after, "seconds": round(m.seconds, 2),
+                            "can_add": m.at is not None} for m in review.missing_pauses],
+    }
+
+
 class Reviewer:
     """``recognizer`` gives frame posteriors over sound units for 16 kHz audio; ``read`` gives the
     intended readings of a text; ``to_16k`` resamples (audio, rate) for the recogniser."""
