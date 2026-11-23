@@ -22,8 +22,10 @@ MIN_SILENCE = 0.10
 # A take that starts with this much silence has gone wrong: the four a listener pointed out began
 # after 1.8 to 9.2 s (one of them left out its first words), and none the listener let pass waited this long.
 MAX_SILENCE_BEFORE = 1.5
-# A syllable heard this faintly is reported but does not ask for another take. Of fifteen takes
-# with one, a listener wanted eight redone and found nothing wrong with four.
+# A syllable heard this faintly asks for another take. Of fifteen takes with one, a listener wanted
+# eight redone and found nothing wrong with four. In another 112 ordinary takes seven had one: four
+# of those had something wrong (a wrong word, a dropped syllable), two of them takes that comparing
+# a transcript with the text let pass.
 UNCLEAR = -10.0
 
 
@@ -60,9 +62,10 @@ class Review:
     @property
     def needs_retake(self) -> bool:
         """Something only another take can fix. Pauses are not counted: ``Reviewer.tidy`` mends them.
-        Unclear syllables are not counted either: about half of them a listener lets pass."""
+        Unclear syllables are counted although a listener lets about half of them pass: another take
+        costs seconds, and the other half are errors nothing else here reports."""
         return bool(self.wrong_readings or self.extra_before or self.extra_after or self.repeated
-                    or self.inserted or self.long_silence_before)
+                    or self.inserted or self.long_silence_before or self.unclear)
 
     @property
     def long_silence_before(self) -> bool:

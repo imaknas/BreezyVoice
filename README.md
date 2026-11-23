@@ -285,8 +285,11 @@ With `--checker`, every take is reviewed and the result carries a `review`:
 - `silence_before` / `long_silence_before`: seconds before the first sound, and whether that is more
   than 1.5 s. Takes that start this late have gone wrong in other ways too; one left out its first words.
 - `unclear`: syllables the recogniser hears only faintly, as slurred, clipped or dropped syllables are.
-  It does not set `needs_retake`: of fifteen takes with one, a listener wanted eight redone, in five
-  of them for the syllable named, and found nothing wrong with four. Slurred syllables are also missed.
+  Of fifteen takes with one, a listener wanted eight redone, in five of them for the syllable named,
+  and found nothing wrong with four. In another 112 ordinary takes seven had one, and four of those
+  had something wrong; two of the four passed a comparison of a transcript with the text. So about
+  half of these retakes are not needed, which is the price of catching the other half. Slurred
+  syllables are also missed.
 - `unnatural_pauses`: silences of 0.14 s or more where the text has no punctuation, and pauses longer
   than 0.50 s at punctuation. These are shortened in the audio (`"tidy_pauses": false` in the request
   keeps them); wrong readings, extra, repeated and inserted sounds and a long silence at the start
