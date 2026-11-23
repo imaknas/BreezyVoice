@@ -202,7 +202,8 @@ def test_evaluate_keeps_each_take_s_review_and_summary_counts_the_findings():
     findings = iter([
         {"needs_retake": True, "wrong_readings": [{"character": "天"}], "repeated": [], "extra_before": [], "extra_after": []},
         {"needs_retake": True, "wrong_readings": [], "repeated": [{"characters": "氣"}], "extra_before": [], "extra_after": ["ㄧ1"]},
-        {"needs_retake": False, "wrong_readings": [], "repeated": [], "unnatural_pauses": [{"after": "去"}]},
+        {"needs_retake": False, "wrong_readings": [], "repeated": [], "unnatural_pauses": [{"after": "去"}],
+         "inserted": [], "long_silence_before": False, "silence_before": 0.3, "unclear": [{"character": "步"}]},
         {"unsupported": "no reading for 'S'"},
     ])
     seen = []
@@ -220,7 +221,7 @@ def test_evaluate_keeps_each_take_s_review_and_summary_counts_the_findings():
     assert records[3]["review"] == {"unsupported": "no reading for 'S'"}
     assert summarize(records)["review"] == {
         "checked": 3, "unsupported": 1, "needs_retake": 2, "wrong_readings": 1, "repeated": 1,
-        "extra_at_the_edges": 1, "unnatural_pauses": 1, "missing_pauses": 0}
+        "inserted": 0, "long_silence_before": 0, "unclear": 1, "extra_at_the_edges": 1, "unnatural_pauses": 1, "missing_pauses": 0}
 
 
 def test_compare_counts_takes_that_stop_or_start_needing_another():

@@ -38,6 +38,13 @@ def pauses(audio: np.ndarray, sample_rate: int, min_seconds: float = 0.25) -> li
     return found
 
 
+def silence_before(audio: np.ndarray, sample_rate: int) -> float:
+    """Seconds before the first sound; the whole length when there is none."""
+    silent = _silent_frames(audio, sample_rate)
+    voiced = np.flatnonzero(~silent)
+    return float(voiced[0] if voiced.size else len(silent)) * _FRAME_SECONDS
+
+
 def speech_pieces(audio: np.ndarray, sample_rate: int, min_gap_seconds: float) -> list[tuple[float, float]]:
     """Stretches of sound separated by at least ``min_gap_seconds`` of silence, as (start, end)."""
     silent = _silent_frames(audio, sample_rate)

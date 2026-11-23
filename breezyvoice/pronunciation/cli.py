@@ -106,7 +106,7 @@ def _train(args) -> int:
 def _check(args) -> int:
     from breezyvoice.pronunciation import model
     from breezyvoice.audio import pauses as silences
-    from breezyvoice.pronunciation.align import repeated, stray_units, syllable_times
+    from breezyvoice.pronunciation.align import inserted, repeated, stray_units, syllable_times
     from breezyvoice.pronunciation.check import score
     from breezyvoice.pronunciation.model import SAMPLE_RATE
     from breezyvoice.pronunciation.pauses import place, unnatural
@@ -138,6 +138,8 @@ def _check(args) -> int:
             "extra_before": before, "extra_after": after,
             "repeated": [{"characters": "".join(reading.characters[r.first:r.first + r.count]), "position": r.first,
                           "at": round(r.at, 2)} for r in repeated(log_probs, reading.readings, recognizer.unit_index)],
+            "inserted": [{"units": "".join(i.units), "after": reading.characters[i.after], "position": i.after,
+                          "at": round(i.at, 2)} for i in inserted(log_probs, reading.readings, recognizer.unit_index)],
             "unnatural_pauses": [{"after": reading.characters[p.after], "position": p.after, "seconds": round(p.length, 2),
                                   "at_punctuation": p.at_punctuation} for p in odd],
         }, ensure_ascii=False), flush=True)

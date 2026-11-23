@@ -101,3 +101,17 @@ def test_a_wrong_reading_asks_for_a_retake(request_json):
 def test_text_the_reviewer_cannot_read_is_still_synthesized(request_json):
     result = handle(FakeEngine(), request_json, FakeReviewer(unsupported=True))
     assert result["ok"] and result["review"] == {"unsupported": "no reading for 'O'"}
+
+
+def test_inserted_syllables_and_a_long_silence_ask_for_another_take_but_unclear_ones_do_not():
+    from breezyvoice.pronunciation.align import Inserted
+    from breezyvoice.pronunciation.review import Unclear, report
+
+    def review(**found):
+        return Review(("你", "好"), (), (), (), (), (), **found)
+
+    assert not review(silence_before=1.2, unclear=(Unclear("好", 1, -14.0),)).needs_retake
+    assert review(silence_before=2.0).needs_retake
+    added = report(review(inserted=(Inserted(0, ("ㄌ", "ㄞ2"), 0.5),)))
+    assert added["needs_retake"] and added["inserted"] == [{"units": "ㄌㄞ2", "after": "你", "position": 0, "at": 0.5}]
+    assert report(review(unclear=(Unclear("好", 1, -14.02),)))["unclear"] == [{"character": "好", "position": 1, "score": -14.0}]

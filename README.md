@@ -264,6 +264,9 @@ With `--checker`, every take is reviewed and the result carries a `review`:
  "wrong_readings": [{"character": "調", "position": 14, "intended": "ㄊㄧㄠ2", "heard": "ㄉㄧㄠ4", "margin": -9.81}],
  "extra_before": [], "extra_after": [],
  "repeated": [{"characters": "就", "position": 2, "at": 0.6}],
+ "inserted": [{"units": "ㄌㄞ2", "after": "神", "position": 10, "at": 3.4}],
+ "silence_before": 0.32, "long_silence_before": false,
+ "unclear": [{"character": "急", "position": 8, "score": -13.6}],
  "unnatural_pauses": [{"after": "物", "position": 3, "seconds": 0.16, "at_punctuation": false}],
  "tidied": true}
 ```
@@ -273,10 +276,21 @@ With `--checker`, every take is reviewed and the result carries a `review`:
 - `repeated`: syllables said twice in a row where the text has them once (就就看 for 就看), with the time
   of the extra copy. Of 39 takes synthesized from text with one character doubled it reported 30, and
   one of 744 ordinary takes, where a listener heard an added word. A syllable without an initial said
-  twice (一一) is usually missed, and other sounds added in mid-sentence are not reported.
+  twice (一一) is usually missed.
+- `inserted`: other whole syllables (an initial and a final) heard in mid-sentence that the text does
+  not have. Ten of 704 takes that passed the other checks had one; a listener went through eight of
+  them, heard an added word at that place in five and wanted six redone. An added syllable without an
+  initial (啊, 喔) is not reported: a lone final between two syllables is nearly always a vowel carried
+  over from its neighbour.
+- `silence_before` / `long_silence_before`: seconds before the first sound, and whether that is more
+  than 1.5 s. Takes that start this late have gone wrong in other ways too; one left out its first words.
+- `unclear`: syllables the recogniser hears only faintly, as slurred, clipped or dropped syllables are.
+  It does not set `needs_retake`: of fifteen takes with one, a listener wanted eight redone, in five
+  of them for the syllable named, and found nothing wrong with four. Slurred syllables are also missed.
 - `unnatural_pauses`: silences of 0.14 s or more where the text has no punctuation, and pauses longer
   than 0.50 s at punctuation. These are shortened in the audio (`"tidy_pauses": false` in the request
-  keeps them); the others can only be fixed by another seed, which is what `needs_retake` says.
+  keeps them); wrong readings, extra, repeated and inserted sounds and a long silence at the start
+  can only be fixed by another seed, which is what `needs_retake` says.
 
 A review takes about 0.1 s for a five-second take on CPU. Text with Latin words is synthesized but not
 reviewed (`"review": {"unsupported": …}`).

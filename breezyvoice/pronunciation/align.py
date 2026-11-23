@@ -7,7 +7,7 @@ from typing import Mapping, Sequence
 
 import torch
 
-from breezyvoice.pronunciation.units import units
+from breezyvoice.pronunciation.units import INITIALS, units
 
 FRAME_SECONDS = 0.02  # the speech encoder produces one frame per 20 ms
 
@@ -137,6 +137,57 @@ def _inserted(text: Sequence[str], heard: Sequence[str]) -> list[tuple[int, list
         else:
             runs.append((before[j], [j]))
     return runs
+
+
+@dataclass(frozen=True)
+class Inserted:
+    after: int  # the syllable of the text it is heard after
+    units: tuple[str, ...]
+    at: float  # seconds, where it starts
+
+
+def inserted(log_probs: torch.Tensor, readings: Sequence[str], unit_index: Mapping[str, int],
+             min_probability: float = 0.8) -> list[Inserted]:
+    """Whole syllables heard inside the sentence that its text does not have (回神來才發現 for 回神才發現).
+
+    Like ``repeated`` this reads the best path frame by frame, and it includes what ``repeated``
+    finds. Only runs made of an initial and a final count, each unit heard with at least
+    ``min_probability``: a lone final between two syllables is nearly always a vowel carried over
+    from its neighbour, and a listener hears nothing added there. Sounds before the first and after
+    the last syllable are ``stray_units``.
+    """
+    names = {i: unit for unit, i in unit_index.items()}
+    groups = [units(r) for r in readings]
+    flat = [u for g in groups for u in g]
+    starts, position = [], 0
+    for group in groups:
+        starts.append(position)
+        position += len(group)
+    heard = heard_units(log_probs)
+    said = [names[i] for i, _, _ in heard]
+    found = []
+    for before, run in _inserted(flat, said):
+        extra = [said[j] for j in run]
+        whole = len(extra) % 2 == 0 and all((u in INITIALS) == (k % 2 == 0) for k, u in enumerate(extra))
+        if before in (0, len(flat)) or not whole or min(heard[j][2] for j in run) < min_probability:
+            continue
+        after = sum(start < before for start in starts) - 1
+        found.append(Inserted(after, tuple(extra), heard[run[0]][1] * FRAME_SECONDS))
+    return found
+
+
+def clarity(log_probs: torch.Tensor, readings: Sequence[str], unit_index: Mapping[str, int]) -> list[float]:
+    """How plainly each syllable is heard: the log-probability of its least clear unit, taken at the
+    frame of the unit's span where the recogniser hears it best. Near 0 for a clearly spoken
+    syllable; far below when the sound is slurred, cut short or not there."""
+    groups = [units(r) for r in readings]
+    flat = [unit_index[u] for g in groups for u in g]
+    best = [float(log_probs[a:b + 1, u].max()) for u, (a, b) in zip(flat, unit_frames(log_probs, flat))]
+    scores, position = [], 0
+    for group in groups:
+        scores.append(min(best[position:position + len(group)]))
+        position += len(group)
+    return scores
 
 
 def _same_syllables(groups: Sequence[Sequence[str]], said: Sequence[str]) -> bool:

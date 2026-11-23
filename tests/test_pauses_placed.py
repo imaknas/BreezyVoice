@@ -3,7 +3,9 @@ import numpy as np
 import pytest
 import torch
 
-from breezyvoice.pronunciation.align import FRAME_SECONDS, repeated, stray_units, syllable_times, unit_frames
+from breezyvoice.audio import silence_before
+from breezyvoice.pronunciation.align import (FRAME_SECONDS, Inserted, clarity, inserted, repeated, stray_units,
+                                              syllable_times, unit_frames)
 from breezyvoice.pronunciation.pauses import Limits, Missing, Pause, missing, place, tidy, unnatural
 
 VOCAB = ["<blank>", "ㄊ", "ㄧㄠ2", "ㄉ", "ㄚ4", "ㄧ1", "ㄧㄠ4", "ㄧ4"]
@@ -204,3 +206,29 @@ def test_repeated_ignores_units_the_recogniser_is_unsure_of():
     lp = _frames(["_", "ㄊ", "ㄧㄠ2", "_", "_", "_", "ㄊ", "ㄧㄠ2", "_", "ㄉ", "ㄚ4", "_"])
     assert repeated(lp, ["ㄊㄧㄠ2", "ㄉㄚ4"], INDEX) != []
     assert repeated(lp, ["ㄊㄧㄠ2", "ㄉㄚ4"], INDEX, min_probability=1.01) == []
+
+
+def test_inserted_finds_a_whole_syllable_the_text_lacks_in_mid_sentence():
+    readings = ["ㄊㄧㄠ2", "ㄧ1", "ㄉㄚ4"]
+    lp = _frames(["_", "ㄊ", "ㄧㄠ2", "_", "ㄧ1", "_", "ㄉ", "ㄧㄠ4", "_", "ㄉ", "ㄚ4", "_"])
+    assert inserted(lp, readings, INDEX) == [Inserted(1, ("ㄉ", "ㄧㄠ4"), pytest.approx(6 * FRAME_SECONDS))]
+    # a lone final or a lone initial between two syllables is not a syllable
+    assert inserted(_frames(["ㄊ", "ㄧㄠ2", "_", "ㄧ4", "_", "ㄧ1", "_", "ㄉ", "ㄚ4"]), readings, INDEX) == []
+    assert inserted(_frames(["ㄊ", "ㄧㄠ2", "_", "ㄧ1", "_", "ㄊ", "_", "ㄉ", "ㄚ4"]), readings, INDEX) == []
+    # before the first and after the last syllable is not mid-sentence
+    assert inserted(_frames(["ㄉ", "ㄧㄠ4", "_", "ㄊ", "ㄧㄠ2", "_", "ㄧ1", "_", "ㄉ", "ㄚ4", "_", "ㄊ", "ㄚ4"]), readings, INDEX) == []
+    assert inserted(lp, readings, INDEX, min_probability=0.99) == []
+
+
+def test_clarity_is_low_for_a_syllable_that_is_not_heard():
+    lp = _frames(["_", "ㄊ", "ㄧㄠ2", "_", "_", "_", "ㄉ", "ㄚ4", "_"])
+    scores = clarity(lp, ["ㄊㄧㄠ2", "ㄧ1", "ㄉㄚ4"], INDEX)
+    assert scores[0] > -0.1 and scores[2] > -0.1
+    assert scores[1] < -3
+
+
+def test_silence_before_is_the_time_to_the_first_sound():
+    rate = 16000
+    audio = np.concatenate([np.zeros(rate * 2, dtype=np.float32), 0.5 * np.ones(rate, dtype=np.float32)])
+    assert silence_before(audio, rate) == pytest.approx(2.0)
+    assert silence_before(np.zeros(rate, dtype=np.float32), rate) == pytest.approx(1.0)

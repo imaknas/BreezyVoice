@@ -7,8 +7,8 @@ from typing import Callable
 import numpy as np
 import torch
 
-from breezyvoice.audio import pauses as silences
-from breezyvoice.pronunciation.align import Repeat, repeated, stray_units, syllable_times
+from breezyvoice.audio import pauses as silences, silence_before
+from breezyvoice.pronunciation.align import Inserted, Repeat, clarity, inserted, repeated, stray_units, syllable_times
 from breezyvoice.pronunciation.check import score
 from breezyvoice.pronunciation.pauses import Limits, Missing, Pause, missing, place, tidy, unnatural
 from breezyvoice.pronunciation.readings import Reading, Unsupported
@@ -19,6 +19,12 @@ from breezyvoice.pronunciation.units import flatten
 # -6.7 and the clean ones above -1, apart from one he was unsure of at -6.4.
 READING_MARGIN = -5.0
 MIN_SILENCE = 0.10
+# A take that starts with this much silence has gone wrong: the four a listener pointed out began
+# after 1.8 to 9.2 s (one of them left out its first words), and none he let pass waited this long.
+MAX_SILENCE_BEFORE = 1.5
+# A syllable heard this faintly is reported but does not ask for another take. Of fifteen takes
+# with one, a listener wanted eight redone and found nothing wrong with four.
+UNCLEAR = -10.0
 
 
 @dataclass(frozen=True)
@@ -31,6 +37,13 @@ class WrongReading:
 
 
 @dataclass(frozen=True)
+class Unclear:
+    character: str
+    position: int  # among the spoken characters
+    score: float  # log-probability of its least clear sound
+
+
+@dataclass(frozen=True)
 class Review:
     characters: tuple[str, ...]
     wrong_readings: tuple[WrongReading, ...]
@@ -40,11 +53,20 @@ class Review:
     unnatural_pauses: tuple[Pause, ...]
     missing_pauses: tuple[Missing, ...] = ()  # strong marks spoken without a pause
     repeated: tuple[Repeat, ...] = ()  # syllables said twice in a row where the text has them once
+    inserted: tuple[Inserted, ...] = ()  # other whole syllables heard in mid-sentence that the text lacks
+    silence_before: float = 0.0  # seconds before the first sound
+    unclear: tuple[Unclear, ...] = ()  # syllables heard faintly: slurred, cut short or left out
 
     @property
     def needs_retake(self) -> bool:
-        """Something only another take can fix. Pauses are not counted: ``Reviewer.tidy`` mends them."""
-        return bool(self.wrong_readings or self.extra_before or self.extra_after or self.repeated)
+        """Something only another take can fix. Pauses are not counted: ``Reviewer.tidy`` mends them.
+        Unclear syllables are not counted either: about half of them a listener lets pass."""
+        return bool(self.wrong_readings or self.extra_before or self.extra_after or self.repeated
+                    or self.inserted or self.long_silence_before)
+
+    @property
+    def long_silence_before(self) -> bool:
+        return self.silence_before > MAX_SILENCE_BEFORE
 
 
 def report(review: Review) -> dict:
@@ -57,6 +79,12 @@ def report(review: Review) -> dict:
         "extra_after": list(review.extra_after),
         "repeated": [{"characters": "".join(review.characters[r.first:r.first + r.count]), "position": r.first,
                       "at": round(r.at, 2)} for r in review.repeated],
+        "inserted": [{"units": "".join(i.units), "after": review.characters[i.after], "position": i.after,
+                      "at": round(i.at, 2)} for i in review.inserted],
+        "silence_before": round(review.silence_before, 2),
+        "long_silence_before": review.long_silence_before,
+        "unclear": [{"character": u.character, "position": u.position, "score": round(u.score, 1)}
+                    for u in review.unclear],
         "unnatural_pauses": [{"after": review.characters[p.after], "position": p.after, "seconds": round(p.length, 2),
                               "at_punctuation": p.at_punctuation} for p in review.unnatural_pauses],
         "missing_pauses": [{"after": review.characters[m.after], "position": m.after, "seconds": round(m.seconds, 2),
@@ -93,9 +121,13 @@ class Reviewer:
         before, after = stray_units(log_probs, times, self._recognizer.vocabulary)
         placed = tuple(place(silences(audio, sample_rate, MIN_SILENCE), times, reading.positions, reading.spoken))
         lacking = missing(audio, sample_rate, placed, times, reading.positions, reading.spoken, self._limits)
+        twice = tuple(repeated(log_probs, reading.readings, index))
+        added = tuple(i for i in inserted(log_probs, reading.readings, index) if all(i.at != r.at for r in twice))
+        faint = tuple(Unclear(reading.characters[k], k, s)
+                      for k, s in enumerate(clarity(log_probs, reading.readings, index)) if s < UNCLEAR)
         return Review(reading.characters, wrong, tuple(before), tuple(after), placed,
-                      tuple(unnatural(placed, self._limits)), tuple(lacking),
-                      tuple(repeated(log_probs, reading.readings, index)))
+                      tuple(unnatural(placed, self._limits)), tuple(lacking), twice, added,
+                      silence_before(audio, sample_rate), faint)
 
     def tidy(self, audio: np.ndarray, sample_rate: int, review: Review) -> np.ndarray:
         """The take with its unnatural pauses shortened and its missing ones added; the speech itself
