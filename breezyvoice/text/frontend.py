@@ -9,7 +9,7 @@ from __future__ import annotations
 import re
 from typing import Callable, Sequence
 
-from breezyvoice.text.normalize import normalize_zh
+from breezyvoice.text.normalize import normalize_zh, without_er
 
 # g2p(text) -> one reading per character (None where it has none), e.g. g2pw.G2PWConverter.
 G2P = Callable[[str], Sequence[str | None]]
@@ -47,9 +47,10 @@ def _clean_zh(text: str) -> str:
     return text
 
 
-def _normalize_segment(text: str, spell_english_number: Callable[[str], str]) -> str:
+def _normalize_segment(text: str, spell_english_number: Callable[[str], str], annotated: bool = False) -> str:
+    """``annotated``: a manual annotation follows, so the last character keeps what was written for it."""
     if contains_chinese(text):
-        return _clean_zh(normalize_zh(text))
+        return _clean_zh(normalize_zh(without_er(text, keep_last=annotated)))
     return re.sub(r"\d+", lambda m: spell_english_number(m.group(0)), text)
 
 
@@ -57,7 +58,8 @@ def normalize(text: str, spell_english_number: Callable[[str], str]) -> str:
     """Normalise ``text``; ``[...]`` annotations pass through unchanged."""
     text = text.strip()
     parts = _BRACKET.split(text)
-    out = [p if _BRACKET.fullmatch(p) else _normalize_segment(p, spell_english_number) for p in parts]
+    out = [p if _BRACKET.fullmatch(p) else _normalize_segment(p, spell_english_number, annotated=i + 1 < len(parts))
+           for i, p in enumerate(parts)]
     joined = "".join(out).strip()
     if contains_chinese(joined):
         joined = re.sub(r"[，,]+$", "。", joined)

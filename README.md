@@ -162,8 +162,13 @@ not build on macOS) with rules for Taiwan Mandarin, e.g.:
 | `3-5天` / `1/3` / `1:2` | 三到五天 / 三分之一 / 一比二 |
 | `0912345678` | 零九一二三四五六七八 |
 | `30°C` / `5km` / `NT$300` | 三十度 / 五公里 / 三百元 |
+| `一會兒` / `有點兒` / `這兒` / `哪兒` | 一會 / 有點 / 這裡 / 哪裡 |
 
 Write dates as `3月5日`; a bare `3/5` is read as a fraction. See `tests/test_normalize.py`.
+
+The last row is a fixed list of words whose final 兒 is not said in this accent; 兒子, 女兒 and the
+like are untouched. To have one said after all, write its reading: `一會兒[:ㄦ2]`. `text` in the result
+and the positions in `review` follow the rewritten sentence.
 
 ## Deployment
 

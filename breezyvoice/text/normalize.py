@@ -154,6 +154,27 @@ def _bare_number(m: re.Match) -> str:
     return number(s)
 
 
+# Words written with a final 兒 that this voice's accent says without it. A closed list: 兒 is a
+# syllable of its own in 兒子, 女兒, 嬰兒, and a pattern could not tell those apart.
+_WITHOUT_ER = ("一會兒", "待會兒", "等會兒", "一點兒", "有點兒", "差點兒", "一下兒", "一塊兒", "好玩兒", "沒事兒",
+               "小孩兒", "聊天兒", "慢慢兒")
+_PLACE_ER = {"這兒": "這裡", "那兒": "那裡", "哪兒": "哪裡"}
+_ER = re.compile("(" + "|".join(_WITHOUT_ER) + ")|(" + "|".join(_PLACE_ER) + ")(?![子童女孫媳])")
+
+
+def without_er(text: str, keep_last: bool = False) -> str:
+    """Rewrite words ending in a 兒 that is not spoken: 一會兒 → 一會, 這兒 → 這裡.
+
+    With ``keep_last`` a word at the very end is left alone: a reading written after it belongs to
+    its 兒, and whoever wrote that wants the 兒 said.
+    """
+    def rewrite(m: re.Match) -> str:
+        if keep_last and m.end() == len(text):
+            return m.group(0)
+        return m.group(1)[:-1] if m.group(1) else _PLACE_ER[m.group(2)]
+    return _ER.sub(rewrite, text)
+
+
 def normalize_zh(text: str) -> str:
     """Write out numbers and symbols in Chinese text so that no ASCII digit remains."""
     t = _to_halfwidth(text)

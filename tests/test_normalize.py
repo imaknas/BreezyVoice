@@ -93,3 +93,22 @@ def test_spacing_and_trailing_comma():
 
 def test_english_only_text_uses_english_numbers():
     assert normalize("I have 3 apples", _spell) == "I have <3> apples"
+
+
+@pytest.mark.parametrize("text, expected", [
+    ("在戶外待一會兒。", "在戶外待一會。"),
+    ("有點兒冷，等會兒再說。", "有點冷，等會再說。"),
+    ("這兒比那兒暖。", "這裡比那裡暖。"),
+    ("你要去哪兒？", "你要去哪裡？"),
+])
+def test_an_unspoken_er_is_left_out(text, expected):
+    assert normalize(text, _spell) == expected
+
+
+@pytest.mark.parametrize("text", ["兒子和女兒都來了。", "嬰兒與幼兒，還有兒童。", "那兒子不聽話。", "花兒開了。"])
+def test_other_er_stay(text):
+    assert normalize(text, _spell) == text
+
+
+def test_an_er_with_a_reading_written_for_it_is_kept():
+    assert normalize("等一會兒[:ㄦ2]再去那兒。", _spell) == "等一會兒[:ㄦ2]再去那裡。"
