@@ -16,11 +16,11 @@ from breezyvoice.pronunciation.units import flatten
 
 # The intended reading must fit this much worse than another reading of the character before the
 # take is reported. On the takes a listener judged, the two with a wrong reading scored -9.8 and
-# -6.7 and the clean ones above -1, apart from one he was unsure of at -6.4.
+# -6.7 and the clean ones above -1, apart from one they were unsure of at -6.4.
 READING_MARGIN = -5.0
 MIN_SILENCE = 0.10
 # A take that starts with this much silence has gone wrong: the four a listener pointed out began
-# after 1.8 to 9.2 s (one of them left out its first words), and none he let pass waited this long.
+# after 1.8 to 9.2 s (one of them left out its first words), and none the listener let pass waited this long.
 MAX_SILENCE_BEFORE = 1.5
 # A syllable heard this faintly is reported but does not ask for another take. Of fifteen takes
 # with one, a listener wanted eight redone and found nothing wrong with four.
