@@ -114,12 +114,13 @@ def test_a_take_is_recorded_without_a_reviewer_and_when_it_cannot_be_reviewed(re
     assert all(t["decoding"][0]["entropy"] == [2.5, 0.25] for t in kept)
 
 
-def test_a_take_that_cannot_be_recorded_is_still_delivered(request_json):
-    def full(take):
-        raise OSError("no space left")
+@pytest.mark.parametrize("error", [OSError("no space left"), TypeError("not JSON serializable")])
+def test_a_take_that_cannot_be_recorded_is_still_delivered(request_json, error):
+    def failing(take):
+        raise error
 
-    result = handle(FakeEngine(), request_json, None, full)
-    assert result["ok"] and result["record_error"] == "OSError: no space left"
+    result = handle(FakeEngine(), request_json, None, failing)
+    assert result["ok"] and result["record_error"] == f"{type(error).__name__}: {error}"
 
 
 def test_a_wrong_reading_asks_for_a_retake(request_json):

@@ -143,7 +143,7 @@ def handle(engine: BreezyVoice, payload: object, reviewer=None, record: Callable
         if record is not None:
             try:
                 record(decoding_record(req, made, review, report))
-            except OSError as e:
+            except Exception as e:  # noqa: BLE001 - the take is already written; losing its record must not lose it
                 response["record_error"] = f"{type(e).__name__}: {e}"
         return response
     except BadRequest as e:

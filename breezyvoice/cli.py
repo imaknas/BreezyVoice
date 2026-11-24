@@ -43,7 +43,14 @@ def _recorder(args):
         with lock, open(path, "a", encoding="utf-8") as f:
             f.write(line + "\n")
 
-    return record
+    def reporting(take: dict) -> None:
+        try:
+            record(take)
+        except Exception as e:  # noqa: BLE001 - said here because callers rarely read ``record_error``
+            _log(f"could not record a take in {path}: {type(e).__name__}: {e}")
+            raise
+
+    return reporting
 
 
 def cmd_setup(args) -> int:
@@ -145,11 +152,15 @@ def _model_args(p: argparse.ArgumentParser) -> None:
     p.add_argument("--threads", type=int, default=None, help="CPU threads for torch / onnxruntime")
     p.add_argument("--checker", type=Path, default=None,
                    help="sound-unit recogniser from `pronunciation train`: review each take and tidy its pauses")
+    p.add_argument("--sampler", choices=("repetition-aware", "top-k"), default="repetition-aware",
+                   help="how the next speech token is drawn; top-k reproduces takes made before the default changed")
+
+
+def _take_args(p: argparse.ArgumentParser) -> None:
+    _model_args(p)
     p.add_argument("--decoding-log", type=Path, default=None,
                    help="append to this file, one JSON line per take, how undecided the model was at each speech "
                         "token and (with --checker) when each character is said")
-    p.add_argument("--sampler", choices=("repetition-aware", "top-k"), default="repetition-aware",
-                   help="how the next speech token is drawn; top-k reproduces takes made before the default changed")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -164,16 +175,16 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--ref-text", required=True, help="transcript of --ref-wav")
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--out", required=True, type=Path)
-    _model_args(p)
+    _take_args(p)
 
     p = sub.add_parser("batch", help="JSON lines on stdin → JSON lines on stdout, model loaded once")
-    _model_args(p)
+    _take_args(p)
 
     p = sub.add_parser("serve", help="localhost HTTP service, model loaded once")
     p.add_argument("--host", default="127.0.0.1")
     p.add_argument("--port", type=int, default=8765)
     p.add_argument("--allow-remote", action="store_true")
-    _model_args(p)
+    _take_args(p)
 
     from breezyvoice.evaluation import cli as evaluation
 
