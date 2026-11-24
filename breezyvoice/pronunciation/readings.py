@@ -1,6 +1,7 @@
 """The intended reading of every character of a text, and the other readings it has."""
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Mapping, Sequence
@@ -32,6 +33,22 @@ def _same_to_a_listener(character: str, a: str, b: str) -> bool:
     return (a in variants and b in variants) or _merged(a) == _merged(b)
 
 
+_WRITTEN = re.compile(r"\[:([^\]]*)\]")
+
+
+def _written_readings(text: str) -> tuple[str, dict[int, str]]:
+    """``text`` without its ``[:注音]`` annotations, and the reading each one gives the character before it."""
+    plain, written, length, last = [], {}, 0, 0
+    for match in _WRITTEN.finditer(text):
+        plain.append(text[last:match.start()])
+        length += len(plain[-1])
+        last = match.end()
+        if length:
+            written[length - 1] = match.group(1)
+    plain.append(text[last:])
+    return "".join(plain), written
+
+
 class Unsupported(ValueError):
     """The text holds something the recogniser has no units for (Latin words, for instance)."""
 
@@ -58,11 +75,14 @@ def load_polyphones(path: Path) -> dict[str, list[str]]:
 def read(text: str, normalise: Callable[[str], str], predict: Callable[[str], Sequence[str | None]],
          polyphones: Mapping[str, Sequence[str]]) -> Reading:
     """``normalise`` writes numbers and symbols out as the synthesizer does; ``predict`` returns one
-    entry per character of its input, a reading or None for what is not spoken."""
-    spoken = normalise(text)
-    predicted = predict(spoken)
+    entry per character of its input, a reading or None for what is not spoken. A reading written
+    after a character (``好[:ㄏㄠ3]``) replaces the predicted one, as it does for the synthesizer."""
+    spoken, written = _written_readings(normalise(text))
+    predicted = list(predict(spoken))
     if len(predicted) != len(spoken):
         raise Unsupported(f"reading predictor returned {len(predicted)} entries for {len(spoken)} characters")
+    for position, reading in written.items():  # a reading written in the text is the one intended
+        predicted[position] = reading
     characters, readings, positions = [], [], []
     for position, (character, reading) in enumerate(zip(spoken, predicted)):
         if reading is None:

@@ -301,7 +301,8 @@ With `--checker`, every take is reviewed and the result carries a `review`:
   can only be fixed by another seed, which is what `needs_retake` says.
 
 A review takes about 0.1 s for a five-second take on CPU. Text with Latin words is synthesized but not
-reviewed (`"review": {"unsupported": …}`).
+reviewed (`"review": {"unsupported": …}`). A reading written in the text (`調[:ㄉㄧㄠ4]`) is the one the
+take is held to.
 
 `--decoding-log FILE` (on `serve`, `batch` and `synth`) appends one JSON line per take with how
 undecided the language model was at each speech token: the entropy of the distribution the token was

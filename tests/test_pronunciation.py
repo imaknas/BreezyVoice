@@ -63,6 +63,19 @@ def test_read_applies_normalisation_first():
     assert reading.characters == ("一",)
 
 
+def test_read_takes_a_reading_written_in_the_text_as_the_one_intended():
+    reading = read("調[:ㄉㄧㄠ4]大，好[:ㄏㄠ3]一。", lambda t: t, _predict, {"調": ["ㄊㄧㄠ2", "ㄉㄧㄠ4"]})
+    assert reading.characters == ("調", "大", "好", "一")
+    assert reading.readings == ("ㄉㄧㄠ4", "ㄉㄚ4", "ㄏㄠ3", "ㄧ1")
+    assert reading.others == (("ㄊㄧㄠ2",), (), (), ())
+    assert (reading.spoken, reading.positions) == ("調大，好一。", (0, 1, 3, 4))
+
+
+def test_read_refuses_a_written_reading_that_is_not_one():
+    with pytest.raises(Unsupported):
+        read("調[:tiao2]大", lambda t: t, _predict, {})
+
+
 @pytest.mark.parametrize("text", ["調OK", "。，", "調好"])
 def test_read_refuses_what_it_cannot_read(text):
     with pytest.raises(Unsupported):
