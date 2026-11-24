@@ -303,6 +303,17 @@ With `--checker`, every take is reviewed and the result carries a `review`:
 A review takes about 0.1 s for a five-second take on CPU. Text with Latin words is synthesized but not
 reviewed (`"review": {"unsupported": …}`).
 
+`--decoding-log FILE` (on `serve`, `batch` and `synth`) appends one JSON line per take with how
+undecided the language model was at each speech token: the entropy of the distribution the token was
+drawn from and the log-probability of the token drawn, per sentence, with the number of audio samples
+the sentence came to (its tokens are evenly spaced over them). With `--checker` the line also has when
+each character is said and the review, so an error someone hears later can be looked up. The numbers
+are not used to judge a take. In 92 takes a listener went through, the one character heard as another
+tone was among the 2% of syllables the model was least decided about, but a limit that catches it
+flags about a quarter of all takes, and a character said confidently as another word does not stand
+out at all. The file holds the text of every request and the paths it named, so keep it out of a
+repository. Recording adds under 0.02 s to a five-second take.
+
 The recogniser is trained on speech with known text; the one behind the numbers below saw three hours
 of this synthesizer's own output in one voice (takes whose syllables two recognisers confirmed) plus
 ten minutes of that speaker's recordings: 8,000 steps, about an hour on a Mac mini M4 Pro. On text it

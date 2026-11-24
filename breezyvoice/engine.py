@@ -12,7 +12,7 @@ import numpy as np
 import torch
 
 from breezyvoice.model import SAMPLE_RATE, Networks
-from cosyvoice.llm.sampling import Sampler
+from cosyvoice.llm.sampling import Sampler, recorded
 from breezyvoice.speech_frontend import SpeakerAudio, SpeechFrontend, load_wav_16k
 
 # Upstream decoding settings (single_inference.CustomCosyVoiceModel.inference).
@@ -59,10 +59,19 @@ class Speaker:
 
 
 @dataclass(frozen=True)
+class Decoding:
+    """How one sentence was decoded. Its speech tokens are evenly spaced over its ``samples`` of audio."""
+    entropy: tuple[float, ...]  # per speech token: entropy in nats of the distribution it was drawn from
+    log_prob: tuple[float, ...]  # ... and the log-probability of the token drawn
+    samples: int
+
+
+@dataclass(frozen=True)
 class Synthesis:
     audio: np.ndarray  # float32 mono in [-1, 1]
     sample_rate: int
     text: str  # what was fed to the model, after normalisation and 注音 annotation
+    decoding: tuple[Decoding, ...] = ()  # one per sentence, in the order they follow each other in ``audio``
 
     @property
     def duration_s(self) -> float:
@@ -136,19 +145,22 @@ class BreezyVoice:
         with self._lock, torch.inference_mode():
             torch.manual_seed(seed)  # all sampling draws from the CPU generator (see cosyvoice/llm, flow, hifigan)
             pieces = [self._sentence(s, speaker) for s in sentences]
-        audio = torch.cat(pieces, dim=1).squeeze(0).numpy().astype(np.float32)
-        return Synthesis(audio=audio, sample_rate=SAMPLE_RATE, text=annotated)
+        audio = torch.cat([wave for wave, _ in pieces], dim=1).squeeze(0).numpy().astype(np.float32)
+        return Synthesis(audio=audio, sample_rate=SAMPLE_RATE, text=annotated,
+                         decoding=tuple(decoding for _, decoding in pieces))
 
-    def _sentence(self, sentence: str, speaker: Speaker) -> torch.Tensor:
+    def _sentence(self, sentence: str, speaker: Speaker) -> tuple[torch.Tensor, Decoding]:
         nets, place, spk = self._nets, self._nets.placement, speaker.audio
         text = _ids(self._encode, sentence)
         d = place.llm
+        entropy: list[float] = []
+        log_prob: list[float] = []
         tokens = nets.llm.inference(
             text=text.to(d), text_len=_len(text).to(d),
             prompt_text=speaker.text_token.to(d), prompt_text_len=_len(speaker.text_token).to(d),
             prompt_speech_token=spk.speech_token.to(d), prompt_speech_token_len=_len(spk.speech_token).to(d),
             embedding=spk.embedding.to(d),
-            sampler=self._sampler,
+            sampler=recorded(self._sampler, entropy, log_prob),
             max_token_text_ratio=MAX_TOKEN_TEXT_RATIO, min_token_text_ratio=MIN_TOKEN_TEXT_RATIO,
         )
         d = place.flow
@@ -158,4 +170,6 @@ class BreezyVoice:
             prompt_feat=spk.speech_feat.to(d), prompt_feat_len=torch.tensor([spk.speech_feat.shape[1]], dtype=torch.int32, device=d),
             embedding=spk.embedding.to(d),
         )
-        return nets.hift.inference(mel=mel.to(place.hift)).float().cpu()
+        wave = nets.hift.inference(mel=mel.to(place.hift)).float().cpu()
+        count = tokens.shape[1]
+        return wave, Decoding(tuple(entropy[:count]), tuple(log_prob[:count]), wave.shape[1])

@@ -15,6 +15,25 @@ def _draw(prob: torch.Tensor) -> int:
     return int(prob.cpu().multinomial(1, replacement=True))
 
 
+def recorded(sampler: Sampler, entropy: list[float], log_prob: list[float]) -> Sampler:
+    """``sampler``, noting for each decoded token how undecided the model was (the entropy of the
+    step's whole distribution, in nats) and the log-probability of the token that was drawn.
+
+    The decoder may ask again for the same step when it will not accept the end of speech yet, and
+    asks once more for the step that ends the utterance, so the lists are kept by position: after
+    decoding, their first ``n`` entries belong to the ``n`` tokens.
+    """
+
+    def sample(log_probs: torch.Tensor, decoded: Sequence[int]) -> int:
+        token = sampler(log_probs, decoded)
+        del entropy[len(decoded):], log_prob[len(decoded):]
+        entropy.append(float(-(log_probs.exp() * log_probs.clamp_min(-1e4)).sum()))
+        log_prob.append(float(log_probs[token]))
+        return token
+
+    return sample
+
+
 def top_k(k: int = 25) -> Sampler:
     """Sample among the ``k`` most likely tokens, in proportion to their probability."""
 

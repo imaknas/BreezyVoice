@@ -54,8 +54,12 @@ def test_synthesize_one_sentence(engine, tmp_path):
 
 def test_same_seed_same_audio(engine):
     speaker = engine.speaker(REF_WAV, REF_TEXT)
-    a = engine.synthesize("今天天氣真好。", speaker, seed=11).audio
-    b = engine.synthesize("今天天氣真好。", speaker, seed=11).audio
+    first = engine.synthesize("今天天氣真好。", speaker, seed=11)
+    a, b = first.audio, engine.synthesize("今天天氣真好。", speaker, seed=11).audio
+    (decoding,) = first.decoding
+    assert decoding.samples == len(a) and len(decoding.entropy) == len(decoding.log_prob)
+    assert 45 < len(decoding.entropy) / first.duration_s < 55  # fifty speech tokens to the second
+    assert all(e >= 0 for e in decoding.entropy) and all(p <= 0 for p in decoding.log_prob)
     assert a.shape == b.shape  # the same speech tokens
     # On CPU the two takes are bit-identical. The flow decoder and vocoder on MPS are not exactly
     # repeatable: samples differ by up to about 2e-4 from run to run, a few steps of a 16-bit file.

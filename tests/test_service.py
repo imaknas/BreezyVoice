@@ -2,7 +2,7 @@
 import numpy as np
 import pytest
 
-from breezyvoice.engine import Synthesis
+from breezyvoice.engine import Decoding, Synthesis
 from breezyvoice.service import handle
 
 RATE = 22050
@@ -18,7 +18,8 @@ class FakeEngine:
         rng = np.random.default_rng(seed)
         sound = lambda seconds: 0.2 * rng.standard_normal(int(RATE * seconds))  # noqa: E731
         audio = np.concatenate([sound(0.5), np.zeros(int(RATE * 0.16)), sound(0.5)]).astype(np.float32)
-        return Synthesis(audio=audio, sample_rate=RATE, text=text)
+        return Synthesis(audio=audio, sample_rate=RATE, text=text,
+                         decoding=(Decoding((2.5, 0.25), (-1.5, -0.125), len(audio)),))
 
 
 @pytest.fixture
@@ -66,7 +67,7 @@ class FakeReviewer:
             raise Unsupported("no reading for 'O'")
         gap = Pause(0.5, 0.66, 0, False)
         wrong = (WrongReading("好", 1, "ㄏㄠ3", "ㄏㄠ4", -8.0),) if self.wrong else ()
-        return Review(("你", "好"), wrong, (), (), (gap,), (gap,))
+        return Review(("你", "好"), wrong, (), (), (gap,), (gap,), times=((0.0, 0.5), (0.66, 1.16)))
 
     def tidy(self, audio, sample_rate, review):
         return tidy(audio, sample_rate, review.pauses)
@@ -90,6 +91,35 @@ def test_tidying_can_be_turned_off_per_request(request_json):
     assert not result["review"]["tidied"] and result["duration_s"] == pytest.approx(1.16, abs=0.01)
     bad = handle(FakeEngine(), {**request_json, "tidy_pauses": "no"}, FakeReviewer())
     assert not bad["ok"] and bad["kind"] == "bad_request"
+
+
+def test_each_take_is_recorded_as_it_was_before_tidying(request_json):
+    kept = []
+    result = handle(FakeEngine(), {**request_json, "seed": 4}, FakeReviewer(), kept.append)
+    assert result["review"]["tidied"] and "record_error" not in result
+    (take,) = kept
+    assert (take["text"], take["seed"], take["out"]) == ("你好。", 4, request_json["out"])
+    assert take["decoding"] == [{"samples": int(RATE * 0.5) * 2 + int(RATE * 0.16),
+                                 "entropy": [2.5, 0.25], "log_prob": [-1.5, -0.125]}]
+    assert take["syllables"] == [{"character": "你", "start": 0.0, "end": 0.5},
+                                 {"character": "好", "start": 0.66, "end": 1.16}]
+    assert take["review"] == result["review"]
+
+
+def test_a_take_is_recorded_without_a_reviewer_and_when_it_cannot_be_reviewed(request_json):
+    kept = []
+    handle(FakeEngine(), request_json, None, kept.append)
+    handle(FakeEngine(), request_json, FakeReviewer(unsupported=True), kept.append)
+    assert [("syllables" in t, t.get("review")) for t in kept] == [(False, None), (False, {"unsupported": "no reading for 'O'"})]
+    assert all(t["decoding"][0]["entropy"] == [2.5, 0.25] for t in kept)
+
+
+def test_a_take_that_cannot_be_recorded_is_still_delivered(request_json):
+    def full(take):
+        raise OSError("no space left")
+
+    result = handle(FakeEngine(), request_json, None, full)
+    assert result["ok"] and result["record_error"] == "OSError: no space left"
 
 
 def test_a_wrong_reading_asks_for_a_retake(request_json):

@@ -58,6 +58,7 @@ class Review:
     inserted: tuple[Inserted, ...] = ()  # other whole syllables heard in mid-sentence that the text lacks
     silence_before: float = 0.0  # seconds before the first sound
     unclear: tuple[Unclear, ...] = ()  # syllables heard faintly: slurred, cut short or left out
+    times: tuple[tuple[float, float], ...] = ()  # (start, end) in seconds of each character, before tidying
 
     @property
     def needs_retake(self) -> bool:
@@ -130,7 +131,7 @@ class Reviewer:
                       for k, s in enumerate(clarity(log_probs, reading.readings, index)) if s < UNCLEAR)
         return Review(reading.characters, wrong, tuple(before), tuple(after), placed,
                       tuple(unnatural(placed, self._limits)), tuple(lacking), twice, added,
-                      silence_before(audio, sample_rate), faint)
+                      silence_before(audio, sample_rate), faint, tuple(times))
 
     def tidy(self, audio: np.ndarray, sample_rate: int, review: Review) -> np.ndarray:
         """The take with its unnatural pauses shortened and its missing ones added; the speech itself

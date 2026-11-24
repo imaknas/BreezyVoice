@@ -4,8 +4,9 @@ from __future__ import annotations
 import os
 import tempfile
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
+from typing import Callable
 
 import soundfile
 
@@ -74,20 +75,43 @@ def write_wav(path: Path, result: Synthesis) -> None:
         raise
 
 
-def handle(engine: BreezyVoice, payload: object, reviewer=None) -> dict:
+def decoding_record(req: Request, result: Synthesis, review, report: dict | None) -> dict:
+    """What is known about a take when it is made, kept so that an error someone hears later can be
+    set beside how undecided the model was at that place. ``result`` and the times in ``review`` are
+    those of the take as synthesized, before its pauses were tidied."""
+    record = {
+        "text": req.text, "spoken": result.text, "seed": req.seed, "out": str(req.out), "ref_wav": str(req.ref_wav),
+        "sample_rate": result.sample_rate,
+        # One entry per sentence; its speech tokens are evenly spaced over its samples.
+        "decoding": [{"samples": d.samples, "entropy": [round(x, 3) for x in d.entropy],
+                      "log_prob": [round(x, 3) for x in d.log_prob]} for d in result.decoding],
+    }
+    if review is not None:
+        record["syllables"] = [{"character": c, "start": round(a, 3), "end": round(b, 3)}
+                               for c, (a, b) in zip(review.characters, review.times)]
+    if report is not None:
+        record["review"] = report
+    return record
+
+
+def handle(engine: BreezyVoice, payload: object, reviewer=None, record: Callable[[dict], None] | None = None) -> dict:
     """Run one request; errors come back as {"ok": false, "error": ...} rather than raising.
 
     With a ``reviewer`` (``breezyvoice.pronunciation.review.Reviewer``) the take is checked against its
     text: the response reports wrong readings and stray sounds, which only another seed can fix, and
     unnatural pauses and pauses missing after a colon or semicolon, which are mended in the audio unless
     the request says ``tidy_pauses: false``.
+
+    ``record`` is given ``decoding_record`` of every take. If it cannot keep one, the take is still
+    delivered and the response says so in ``record_error``.
     """
     try:
         req = Request.from_json(payload)
         start = time.monotonic()
         speaker = engine.speaker(req.ref_wav, req.ref_text)
         result = engine.synthesize(req.text, speaker, seed=req.seed)
-        report = None
+        report = review = None
+        made = result
         if reviewer is not None:
             try:
                 review = reviewer.review(result.audio, result.sample_rate, req.text)
@@ -98,8 +122,7 @@ def handle(engine: BreezyVoice, payload: object, reviewer=None) -> dict:
                 report["tidied"] = bool(req.tidy_pauses and (review.unnatural_pauses
                                                               or any(m.at is not None for m in review.missing_pauses)))
                 if report["tidied"]:
-                    result = Synthesis(audio=reviewer.tidy(result.audio, result.sample_rate, review),
-                                       sample_rate=result.sample_rate, text=result.text)
+                    result = replace(result, audio=reviewer.tidy(result.audio, result.sample_rate, review))
         write_wav(req.out, result)
         response = {
             "ok": True,
@@ -117,6 +140,11 @@ def handle(engine: BreezyVoice, payload: object, reviewer=None) -> dict:
         }
         if report is not None:
             response["review"] = report
+        if record is not None:
+            try:
+                record(decoding_record(req, made, review, report))
+            except OSError as e:
+                response["record_error"] = f"{type(e).__name__}: {e}"
         return response
     except BadRequest as e:
         return {"ok": False, "error": str(e), "kind": "bad_request"}

@@ -27,6 +27,25 @@ def _reviewer(args):
     return reviewer(args.checker, weights_dir=args.weights_dir)
 
 
+def _recorder(args):
+    """Appends one JSON line per take to ``--decoding-log``; safe to call from several threads."""
+    if args.decoding_log is None:
+        return None
+    import threading
+    from datetime import datetime, timezone
+
+    path, lock = args.decoding_log, threading.Lock()
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    def record(take: dict) -> None:
+        line = json.dumps({"time": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                           "sampler": args.sampler, **take}, ensure_ascii=False)
+        with lock, open(path, "a", encoding="utf-8") as f:
+            f.write(line + "\n")
+
+    return record
+
+
 def cmd_setup(args) -> int:
     from breezyvoice import assets
 
@@ -40,7 +59,7 @@ def cmd_synth(args) -> int:
 
     engine = _engine(args)
     result = handle(engine, {"text": args.text, "ref_wav": str(args.ref_wav), "ref_text": args.ref_text,
-                             "seed": args.seed, "out": str(args.out)}, _reviewer(args))
+                             "seed": args.seed, "out": str(args.out)}, _reviewer(args), _recorder(args))
     print(json.dumps(result, ensure_ascii=False), flush=True)
     return 0 if result["ok"] else 1
 
@@ -50,7 +69,7 @@ def cmd_batch(args) -> int:
     from breezyvoice.service import handle
 
     engine = _engine(args)
-    review = _reviewer(args)
+    review, record = _reviewer(args), _recorder(args)
     print(json.dumps({"ok": True, "ready": True}), flush=True)
     for line in sys.stdin:
         line = line.strip()
@@ -61,7 +80,7 @@ def cmd_batch(args) -> int:
         except json.JSONDecodeError as e:
             result = {"ok": False, "error": f"invalid JSON: {e}", "kind": "bad_request"}
         else:
-            result = handle(engine, payload, review)
+            result = handle(engine, payload, review, record)
         print(json.dumps(result, ensure_ascii=False), flush=True)
     return 0
 
@@ -74,7 +93,7 @@ def cmd_serve(args) -> int:
              "(requests name local file paths)")
         return 2
     engine = _engine(args)
-    review = _reviewer(args)
+    review, record = _reviewer(args), _recorder(args)
 
     class Handler(BaseHTTPRequestHandler):
         def _send(self, status: int, body: dict) -> None:
@@ -101,7 +120,7 @@ def cmd_serve(args) -> int:
             except json.JSONDecodeError as e:
                 self._send(HTTPStatus.BAD_REQUEST, {"ok": False, "error": f"invalid JSON: {e}", "kind": "bad_request"})
                 return
-            result = handle(engine, payload, review)
+            result = handle(engine, payload, review, record)
             status = HTTPStatus.OK if result["ok"] else (
                 HTTPStatus.BAD_REQUEST if result["kind"] == "bad_request" else HTTPStatus.INTERNAL_SERVER_ERROR)
             self._send(status, result)
@@ -126,6 +145,9 @@ def _model_args(p: argparse.ArgumentParser) -> None:
     p.add_argument("--threads", type=int, default=None, help="CPU threads for torch / onnxruntime")
     p.add_argument("--checker", type=Path, default=None,
                    help="sound-unit recogniser from `pronunciation train`: review each take and tidy its pauses")
+    p.add_argument("--decoding-log", type=Path, default=None,
+                   help="append to this file, one JSON line per take, how undecided the model was at each speech "
+                        "token and (with --checker) when each character is said")
     p.add_argument("--sampler", choices=("repetition-aware", "top-k"), default="repetition-aware",
                    help="how the next speech token is drawn; top-k reproduces takes made before the default changed")
 
