@@ -122,7 +122,8 @@ def _run(args) -> int:
 
     reference, reference_rate = soundfile.read(str(args.ref_wav), dtype="float32", always_2d=True)
     reference = reference.mean(axis=1)
-    engine = load(device=args.device, weights_dir=args.weights_dir, threads=args.threads, sampler=args.sampler)
+    engine = load(device=args.device, weights_dir=args.weights_dir, threads=args.threads, sampler=args.sampler,
+                  as_ended=args.as_ended)
     speaker = engine.speaker(args.ref_wav, args.ref_text)
 
     def synthesize(text: str, seed: int):
@@ -142,6 +143,7 @@ def _run(args) -> int:
     result = {
         "meta": {
             "label": args.label, "commit": _commit(), "device": args.device, "sampler": args.sampler,
+            "as_ended": args.as_ended,
             "date": datetime.datetime.now().astimezone().isoformat(timespec="seconds"),
             "torch": torch.__version__, "seeds": args.seeds, "sentences": str(args.sentences),
             "reference_seconds": len(reference) / reference_rate,

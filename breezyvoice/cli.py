@@ -16,7 +16,8 @@ def _log(msg: str) -> None:
 def _engine(args):
     from breezyvoice.loader import load
 
-    return load(device=args.device, weights_dir=args.weights_dir, threads=args.threads, sampler=args.sampler)
+    return load(device=args.device, weights_dir=args.weights_dir, threads=args.threads, sampler=args.sampler,
+                as_ended=args.as_ended)
 
 
 def _reviewer(args):
@@ -154,6 +155,8 @@ def _model_args(p: argparse.ArgumentParser) -> None:
                    help="sound-unit recogniser from `pronunciation train`: review each take and tidy its pauses")
     p.add_argument("--sampler", choices=("repetition-aware", "top-k"), default="repetition-aware",
                    help="how the next speech token is drawn; top-k reproduces takes made before the default changed")
+    p.add_argument("--as-ended", action="store_true",
+                   help="leave a sentence where the model ended it even if its last sound is still going (as upstream)")
 
 
 def _take_args(p: argparse.ArgumentParser) -> None:

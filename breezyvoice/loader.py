@@ -7,6 +7,7 @@ from pathlib import Path
 import torch
 
 from breezyvoice import assets
+from breezyvoice.ending import ends_loud
 from breezyvoice.engine import BreezyVoice
 from breezyvoice.model import Placement, load_networks
 from breezyvoice.speech_frontend import SpeechFrontend, onnx_session
@@ -95,7 +96,9 @@ def _encoder():
 
 
 def load(device: str = "auto", weights_dir: Path | None = None, threads: int | None = None,
-         sampler: str = DEFAULT_SAMPLER) -> BreezyVoice:
+         sampler: str = DEFAULT_SAMPLER, as_ended: bool = False) -> BreezyVoice:
+    """``as_ended`` leaves each sentence where the model ended it, as upstream does, even when its last
+    sound is still going."""
     found = assets.resolve(weights_dir)
     if threads:
         torch.set_num_threads(threads)
@@ -111,6 +114,7 @@ def load(device: str = "auto", weights_dir: Path | None = None, threads: int | N
         text_frontend=TextFrontend(annotator, _english_numbers()),
         encode=_encoder(),
         sampler=SAMPLERS[sampler](),
+        unfinished=None if as_ended else ends_loud,
         speech_frontend=SpeechFrontend(
             campplus=onnx_session(found.weights_dir / "campplus.onnx", ort_threads),
             speech_tokenizer=onnx_session(found.weights_dir / "speech_tokenizer_v1.onnx", ort_threads),

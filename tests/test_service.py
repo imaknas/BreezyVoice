@@ -99,7 +99,7 @@ def test_each_take_is_recorded_as_it_was_before_tidying(request_json):
     assert result["review"]["tidied"] and "record_error" not in result
     (take,) = kept
     assert (take["text"], take["seed"], take["out"]) == ("你好。", 4, request_json["out"])
-    assert take["decoding"] == [{"samples": int(RATE * 0.5) * 2 + int(RATE * 0.16),
+    assert take["decoding"] == [{"samples": int(RATE * 0.5) * 2 + int(RATE * 0.16), "carried_on": 0,
                                  "entropy": [2.5, 0.25], "log_prob": [-1.5, -0.125]}]
     assert take["syllables"] == [{"character": "你", "start": 0.0, "end": 0.5},
                                  {"character": "好", "start": 0.66, "end": 1.16}]

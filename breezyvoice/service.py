@@ -83,7 +83,7 @@ def decoding_record(req: Request, result: Synthesis, review, report: dict | None
         "text": req.text, "spoken": result.text, "seed": req.seed, "out": str(req.out), "ref_wav": str(req.ref_wav),
         "sample_rate": result.sample_rate,
         # One entry per sentence; its speech tokens are evenly spaced over its samples.
-        "decoding": [{"samples": d.samples, "entropy": [round(x, 3) for x in d.entropy],
+        "decoding": [{"samples": d.samples, "carried_on": d.carried_on, "entropy": [round(x, 3) for x in d.entropy],
                       "log_prob": [round(x, 3) for x in d.log_prob]} for d in result.decoding],
     }
     if review is not None:

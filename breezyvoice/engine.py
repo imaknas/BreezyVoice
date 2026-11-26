@@ -11,6 +11,7 @@ from typing import Callable
 import numpy as np
 import torch
 
+from breezyvoice.ending import ends_loud
 from breezyvoice.model import SAMPLE_RATE, Networks
 from cosyvoice.llm.sampling import Sampler, recorded
 from breezyvoice.speech_frontend import SpeakerAudio, SpeechFrontend, load_wav_16k
@@ -25,6 +26,12 @@ _ANNOTATION = re.compile(r"\[:[^\]]*\]")
 # The model was trained on utterances of up to about thirty seconds; far beyond that it loses its
 # place and repeats itself until the length limit. Sixty characters is about seventeen seconds.
 MAX_SENTENCE_CHARS = 60
+# A sentence that stops while its last sound is still going is carried on this many speech tokens
+# at a time (50 to the second), up to the limit. Of 85 such endings on two voices, 69 were finished
+# by the first four tokens and 2 were left after twelve; carrying every take on instead puts sound
+# (above -30 dB of the peak) into the added stretch of 2 to 16% of the endings that were already fine.
+CARRY_ON_TOKENS = 4
+CARRY_ON_LIMIT = 12
 
 
 def _spoken_length(text: str) -> int:
@@ -64,6 +71,7 @@ class Decoding:
     entropy: tuple[float, ...]  # per speech token: entropy in nats of the distribution it was drawn from
     log_prob: tuple[float, ...]  # ... and the log-probability of the token drawn
     samples: int
+    carried_on: int = 0  # how many of the last tokens were drawn after the model first ended the sentence
 
 
 @dataclass(frozen=True)
@@ -91,12 +99,17 @@ class BreezyVoice:
 
     def __init__(self, networks: Networks, text_frontend: Callable[[str], str],
                  encode: Callable[[str], list[int]], speech_frontend: SpeechFrontend,
-                 sampler: Sampler, speaker_cache_size: int = 8):
+                 sampler: Sampler, speaker_cache_size: int = 8,
+                 unfinished: Callable[[np.ndarray, int], bool] | None = ends_loud):
+        """``unfinished`` says of a rendered sentence (samples, sample rate) whether it stopped too
+        soon; such a sentence is carried on and rendered again. None leaves every sentence where
+        the model ended it."""
         self._nets = networks
         self._text = text_frontend
         self._encode = encode
         self._speech = speech_frontend
         self._sampler = sampler
+        self._unfinished = unfinished
         self._speakers: OrderedDict[tuple, Speaker] = OrderedDict()
         self._cache_size = speaker_cache_size
         self._lock = threading.Lock()
@@ -150,26 +163,42 @@ class BreezyVoice:
                          decoding=tuple(decoding for _, decoding in pieces))
 
     def _sentence(self, sentence: str, speaker: Speaker) -> tuple[torch.Tensor, Decoding]:
-        nets, place, spk = self._nets, self._nets.placement, speaker.audio
+        nets, spk = self._nets, speaker.audio
         text = _ids(self._encode, sentence)
-        d = place.llm
+        d = nets.placement.llm
         entropy: list[float] = []
         log_prob: list[float] = []
-        tokens = nets.llm.inference(
+        prompt = dict(
             text=text.to(d), text_len=_len(text).to(d),
             prompt_text=speaker.text_token.to(d), prompt_text_len=_len(speaker.text_token).to(d),
             prompt_speech_token=spk.speech_token.to(d), prompt_speech_token_len=_len(spk.speech_token).to(d),
             embedding=spk.embedding.to(d),
             sampler=recorded(self._sampler, entropy, log_prob),
-            max_token_text_ratio=MAX_TOKEN_TEXT_RATIO, min_token_text_ratio=MIN_TOKEN_TEXT_RATIO,
         )
-        d = place.flow
+        tokens = nets.llm.inference(
+            **prompt, max_token_text_ratio=MAX_TOKEN_TEXT_RATIO, min_token_text_ratio=MIN_TOKEN_TEXT_RATIO)
+        ended = tokens.shape[1]
+        wave = self._render(tokens, spk)
+        drawn = torch.get_rng_state()
+        while (self._unfinished is not None and tokens.shape[1] - ended < CARRY_ON_LIMIT
+               and self._unfinished(wave[0].numpy(), SAMPLE_RATE)):
+            longer = nets.llm.carry_on(tokens, CARRY_ON_TOKENS, **prompt)
+            if longer.shape[1] == tokens.shape[1]:
+                break  # the decoder has no positions left
+            tokens = longer
+            wave = self._render(tokens, spk)
+        # The sentences after this one are drawn as if it had not been carried on.
+        torch.set_rng_state(drawn)
+        count = tokens.shape[1]
+        return wave, Decoding(tuple(entropy[:count]), tuple(log_prob[:count]), wave.shape[1], carried_on=count - ended)
+
+    def _render(self, tokens: torch.Tensor, spk: SpeakerAudio) -> torch.Tensor:
+        """(1, samples) waveform of the speech ``tokens`` in the voice of ``spk``."""
+        nets, d = self._nets, self._nets.placement.flow
         mel = nets.flow.inference(
             token=tokens.to(d), token_len=torch.tensor([tokens.shape[1]], dtype=torch.int32, device=d),
             prompt_token=spk.speech_token.to(d), prompt_token_len=_len(spk.speech_token).to(d),
             prompt_feat=spk.speech_feat.to(d), prompt_feat_len=torch.tensor([spk.speech_feat.shape[1]], dtype=torch.int32, device=d),
             embedding=spk.embedding.to(d),
         )
-        wave = nets.hift.inference(mel=mel.to(place.hift)).float().cpu()
-        count = tokens.shape[1]
-        return wave, Decoding(tuple(entropy[:count]), tuple(log_prob[:count]), wave.shape[1])
+        return nets.hift.inference(mel=mel.to(nets.placement.hift)).float().cpu()

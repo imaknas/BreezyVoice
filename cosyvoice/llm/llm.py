@@ -144,8 +144,7 @@ class TransformerLM(torch.nn.Module):
                 break
         return top_ids
 
-    @torch.inference_mode()
-    def inference(
+    def _prompt(
             self,
             text: torch.Tensor,
             text_len: torch.Tensor,
@@ -154,13 +153,11 @@ class TransformerLM(torch.nn.Module):
             prompt_speech_token: torch.Tensor,
             prompt_speech_token_len: torch.Tensor,
             embedding: torch.Tensor,
-            sampler: Sampler = top_k(25),
-            max_token_text_ratio: float = 20,
-            min_token_text_ratio: float = 2,
     ) -> torch.Tensor:
+        """Everything the decoder reads before the first speech token of the utterance."""
         device = text.device
         text = torch.concat([prompt_text, text], dim=1)
-        text_len += prompt_text_len
+        text_len = text_len + prompt_text_len
         text = self.text_embedding(text)
 
         # 1. encode text
@@ -181,11 +178,29 @@ class TransformerLM(torch.nn.Module):
             prompt_speech_token_emb = self.speech_embedding(prompt_speech_token)
         else:
             prompt_speech_token_emb = torch.zeros(1, 0, self.llm_input_size).to(device)
-        lm_input = torch.concat([sos_eos_emb, embedding, text, task_id_emb, prompt_speech_token_emb], dim=1)
+        return torch.concat([sos_eos_emb, embedding, text, task_id_emb, prompt_speech_token_emb], dim=1)
+
+    @torch.inference_mode()
+    def inference(
+            self,
+            text: torch.Tensor,
+            text_len: torch.Tensor,
+            prompt_text: torch.Tensor,
+            prompt_text_len: torch.Tensor,
+            prompt_speech_token: torch.Tensor,
+            prompt_speech_token_len: torch.Tensor,
+            embedding: torch.Tensor,
+            sampler: Sampler = top_k(25),
+            max_token_text_ratio: float = 20,
+            min_token_text_ratio: float = 2,
+    ) -> torch.Tensor:
+        device = text.device
+        lm_input = self._prompt(text, text_len, prompt_text, prompt_text_len, prompt_speech_token,
+                                prompt_speech_token_len, embedding)
 
         # 4. cal min/max_length
-        min_len = int((text_len - prompt_text_len) * min_token_text_ratio)
-        max_len = int((text_len - prompt_text_len) * max_token_text_ratio)
+        min_len = int(text_len * min_token_text_ratio)
+        max_len = int(text_len * max_token_text_ratio)
 
         # 5. step by step decode
         out_tokens = []
@@ -201,4 +216,44 @@ class TransformerLM(torch.nn.Module):
             out_tokens.append(top_ids)
             y_pred = self.llm.decode_step(self.speech_embedding.weight[top_ids].reshape(1, 1, -1), caches)
 
+        return torch.tensor([out_tokens], dtype=torch.int64, device=device)
+
+    @torch.inference_mode()
+    def carry_on(
+            self,
+            tokens: torch.Tensor,
+            count: int,
+            text: torch.Tensor,
+            text_len: torch.Tensor,
+            prompt_text: torch.Tensor,
+            prompt_text_len: torch.Tensor,
+            prompt_speech_token: torch.Tensor,
+            prompt_speech_token_len: torch.Tensor,
+            embedding: torch.Tensor,
+            sampler: Sampler = top_k(25),
+    ) -> torch.Tensor:
+        """``tokens`` (1, N) of an utterance that has ended, followed by up to ``count`` more.
+
+        The end of speech is one of the tokens a step may draw, and it is sometimes drawn while the
+        last sound is still fading. This takes the utterance up where it stopped and draws on with
+        the end of speech left out of the distribution (not drawn again until something else comes
+        up: where the model does want to stop, a sampler that keeps only the likeliest tokens would
+        return nothing else). Fewer than ``count`` tokens are added when the decoder has no positions
+        left for them.
+        """
+        device = tokens.device
+        lm_input = self._prompt(text, text_len, prompt_text, prompt_text_len, prompt_speech_token,
+                                prompt_speech_token_len, embedding)
+        out_tokens = [int(t) for t in tokens[0]]
+        count = min(count, self.llm.max_decode_length() - lm_input.size(1) - len(out_tokens))
+        if count <= 0:
+            return tokens
+        spoken = torch.concat([lm_input, self.speech_embedding(tokens)], dim=1)
+        y_pred, caches = self.llm.decode_prefill(spoken, capacity=spoken.size(1) + count)
+        for _ in range(count):
+            logp = self.llm_decoder(y_pred[:, -1]).squeeze(dim=0).clone()
+            logp[self.speech_token_size] = float("-inf")
+            top_ids = sampler(logp.log_softmax(dim=-1), out_tokens)
+            out_tokens.append(top_ids)
+            y_pred = self.llm.decode_step(self.speech_embedding.weight[top_ids].reshape(1, 1, -1), caches)
         return torch.tensor([out_tokens], dtype=torch.int64, device=device)

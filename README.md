@@ -147,6 +147,32 @@ The repeat limit sets the pace: this model produces 50 tokens per second, a held
 token, and a strict limit cuts held sounds short. The stricter settings pause less but speak faster and,
 to a listener, slur; the default keeps the pace of the upstream setting and misses fewer syllables.
 
+The end of a sentence is one of the tokens a step may draw, and now and then it is drawn while the last
+syllable is still sounding: the take stops short, and a listener hears the ending as cut off or abrupt.
+On three voices this happened to 11 to 20% of sentences, mostly by chance (the same text with another
+seed usually ends properly). So each sentence is checked once it is rendered: if its last 20 ms are
+still within 25 dB of its peak, the model carries on from where it stopped, with the end left out of
+what it may draw, for 4 tokens (0.08 s) at a time and at most 12, and the sentence is rendered again.
+
+| held-out sentences, one seed | endings the check flags | new stray syllable after the end | sentences carried on |
+|---|---|---|---|
+| voice A, 296 | 36 → 2 | 0 | 36 |
+| voice B, 296 | 71 → 5 | 5 | 71 |
+
+The first column is the check grading itself, so the evidence that it helps is a listener's: comparing
+14 flagged endings with and without the extra tokens, blind, they judged 13 of the originals cut off
+and 11 of the carried-on ones normal. What is left: endings quieter than the level are not touched (a
+tenth to a sixth of sentences end between 35 and 25 dB below the peak, and the listener called some
+endings in that range abrupt too), and where the model was about to say more, carrying on lets it: on
+voice B, 5 of the 71 sentences gained a syllable. At the end of a request the checker reports that
+(`extra_after`, so `needs_retake`); before another sentence of the same request it reported 2 of 4.
+
+A sentence that had finished keeps the tokens it had, and so do the sentences after one that is
+carried on. Carrying every sentence on instead puts sound into the added stretch of 2 to 16% of the
+endings that were fine, and drawing the end again rather than leaving it out can loop where the
+sampler keeps nothing else. A sentence that is carried on is rendered again, so it takes the flow and
+vocoder stages twice. `--as-ended` leaves every sentence where the model ended it, as upstream does.
+
 ## Text normalisation
 
 `breezyvoice/text/normalize.py` replaces upstream's WeTextProcessing/pynini dependency (which does
@@ -307,7 +333,8 @@ take is held to.
 `--decoding-log FILE` (on `serve`, `batch` and `synth`) appends one JSON line per take with how
 undecided the language model was at each speech token: the entropy of the distribution the token was
 drawn from and the log-probability of the token drawn, per sentence, with the number of audio samples
-the sentence came to (its tokens are evenly spaced over them). With `--checker` the line also has when
+the sentence came to (its tokens are evenly spaced over them). `carried_on` is how many of a sentence's
+last tokens were drawn after the model first ended it (see Sampling). With `--checker` the line also has when
 each character is said and the review, so an error someone hears later can be looked up. The numbers
 are not used to judge a take. In 92 takes a listener went through, the one character heard as another
 tone was among the 2% of syllables the model was least decided about, but a limit that catches it
@@ -384,7 +411,8 @@ the audio is finite, not silent, of plausible length, and identical for the same
   relative-position projection is reused across decoding steps (bit-identical output on CPU).
 - **Seeding:** each request seeds torch before synthesis, and all sampling (LLM top-k, flow noise,
   vocoder noise) draws from the CPU generator, so a seed gives the same take on CPU and MPS, and the
-  same take as upstream on CPU.
+  same take as upstream on CPU (with `--sampler top-k --as-ended`).
+- **Endings:** a sentence that stops while its last sound is still going is carried on (see Sampling).
 - Whisper auto-transcription of the reference was dropped: `ref_text` is required.
 
 Verified against upstream (torch 2.3.1, CPU) on `data/example.wav` with the same inputs and seed:

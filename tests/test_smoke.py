@@ -66,6 +66,34 @@ def test_same_seed_same_audio(engine):
     assert np.allclose(a, b, atol=1e-3)
 
 
+def test_a_sentence_carried_on_keeps_what_was_said_and_never_ends_again(engine, monkeypatch):
+    speaker = engine.speaker(REF_WAV, REF_TEXT)
+    monkeypatch.setattr(engine, "_unfinished", None)
+    as_ended = engine.synthesize("今天天氣真好。", speaker, seed=11)
+    monkeypatch.setattr(engine, "_unfinished", lambda audio, rate: True)
+    carried = engine.synthesize("今天天氣真好。", speaker, seed=11)
+    (before,), (after,) = as_ended.decoding, carried.decoding
+    assert before.carried_on == 0 and after.carried_on == 12
+    assert len(after.entropy) == len(before.entropy) + 12 == len(after.log_prob)
+    # The same seed says the same thing up to where the model first stopped.
+    assert after.log_prob[:len(before.log_prob)] == pytest.approx(before.log_prob, abs=1e-4)
+    assert 0.2 < carried.duration_s - as_ended.duration_s < 0.28  # twelve tokens at fifty to the second
+    assert all(np.isfinite(after.log_prob))  # the end of speech, left out, is never the token drawn
+
+
+def test_carrying_one_sentence_on_leaves_the_next_one_as_it_was(engine, monkeypatch):
+    speaker = engine.speaker(REF_WAV, REF_TEXT)
+    text = "今天天氣真好。我們去公園散步吧。"
+    monkeypatch.setattr(engine, "_unfinished", None)
+    as_ended = engine.synthesize(text, speaker, seed=5).decoding
+    calls = iter([True, False, False])  # only the first sentence is taken to have stopped short
+    monkeypatch.setattr(engine, "_unfinished", lambda audio, rate: next(calls))
+    carried = engine.synthesize(text, speaker, seed=5).decoding
+    assert [d.carried_on for d in carried] == [4, 0]
+    assert carried[1].log_prob == pytest.approx(as_ended[1].log_prob, abs=1e-4)
+    assert carried[1].samples == as_ended[1].samples
+
+
 def test_bad_request_is_reported_not_raised(engine, tmp_path):
     from breezyvoice.service import handle
 
