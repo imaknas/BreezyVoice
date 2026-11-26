@@ -96,6 +96,12 @@ def report(review: Review) -> dict:
     }
 
 
+def _part_of(added, repeat) -> bool:
+    """Whether an inserted finding is (some of) the second copy a repeat already reports: it starts
+    no earlier than the copy and sits among the syllables that were said twice."""
+    return added.at >= repeat.at and repeat.first - 1 <= added.after < repeat.first + repeat.count
+
+
 class Reviewer:
     """``recognizer`` gives frame posteriors over sound units for 16 kHz audio; ``read`` gives the
     intended readings of a text; ``to_16k`` resamples (audio, rate) for the recogniser."""
@@ -126,7 +132,7 @@ class Reviewer:
         placed = tuple(place(silences(audio, sample_rate, MIN_SILENCE), times, reading.positions, reading.spoken))
         lacking = missing(audio, sample_rate, placed, times, reading.positions, reading.spoken, self._limits)
         twice = tuple(repeated(log_probs, reading.readings, index))
-        added = tuple(i for i in inserted(log_probs, reading.readings, index) if all(i.at != r.at for r in twice))
+        added = tuple(i for i in inserted(log_probs, reading.readings, index) if not any(_part_of(i, r) for r in twice))
         faint = tuple(Unclear(reading.characters[k], k, s)
                       for k, s in enumerate(clarity(log_probs, reading.readings, index)) if s < UNCLEAR)
         return Review(reading.characters, wrong, tuple(before), tuple(after), placed,

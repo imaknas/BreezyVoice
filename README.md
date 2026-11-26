@@ -165,7 +165,7 @@ and 11 of the carried-on ones normal. What is left: endings quieter than the lev
 tenth to a sixth of sentences end between 35 and 25 dB below the peak, and the listener called some
 endings in that range abrupt too), and where the model was about to say more, carrying on lets it: on
 voice B, 5 of the 71 sentences gained a syllable. At the end of a request the checker reports that
-(`extra_after`, so `needs_retake`); before another sentence of the same request it reported 2 of 4.
+(`extra_after`, so `needs_retake`); before another sentence of the same request it reported 3 of 4.
 
 A sentence that had finished keeps the tokens it had, and so do the sentences after one that is
 carried on. Carrying every sentence on instead puts sound into the added stretch of 2 to 16% of the

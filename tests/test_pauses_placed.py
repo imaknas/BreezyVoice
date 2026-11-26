@@ -184,6 +184,17 @@ def test_reviewer_uses_the_margin_a_character_has_of_its_own():
     assert found.heard == "ㄉㄧㄠ4" and 0 < found.margin < 3.5
 
 
+def test_what_a_repeat_reports_is_not_listed_again_as_inserted():
+    from breezyvoice.pronunciation.align import Repeat
+    from breezyvoice.pronunciation.review import _part_of
+
+    repeat = Repeat(first=3, count=2, at=1.0)  # syllables 3 and 4 said again from 1.0 s
+    assert _part_of(Inserted(2, ("ㄉ", "ㄚ4"), 1.0), repeat)  # the copy, found after syllable 2
+    assert _part_of(Inserted(4, ("ㄉ", "ㄚ4"), 1.3), repeat)  # a later part of it
+    assert not _part_of(Inserted(2, ("ㄉ", "ㄚ4"), 0.6), repeat)  # before the copy starts
+    assert not _part_of(Inserted(7, ("ㄉ", "ㄚ4"), 2.0), repeat)  # elsewhere in the sentence
+
+
 def test_missing_does_not_place_a_pause_where_the_sound_never_dips():
     rate = 16000
     rng = np.random.default_rng(2)
