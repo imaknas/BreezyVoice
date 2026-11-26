@@ -13,9 +13,15 @@ from breezyvoice.pronunciation.units import is_reading
 # predicted is not a mistake.
 FREE_VARIANTS = {
     "液": ("ㄧㄝ4", "ㄧ4"), "那": ("ㄋㄚ4", "ㄋㄟ4"), "這": ("ㄓㄜ4", "ㄓㄟ4"), "誰": ("ㄕㄟ2", "ㄕㄨㄟ2"),
-    "熟": ("ㄕㄡ2", "ㄕㄨ2"), "血": ("ㄒㄧㄝ3", "ㄒㄩㄝ4", "ㄒㄩㄝ3"), "暴": ("ㄅㄠ4", "ㄆㄨ4"),
+    "熟": ("ㄕㄡ2", "ㄕㄨ2"), "暴": ("ㄅㄠ4", "ㄆㄨ4"),
     "哪": ("ㄋㄚ3", "ㄋㄟ3"), "角": ("ㄐㄧㄠ3", "ㄐㄩㄝ2"),
 }
+# Characters with one reading a listener in Taiwan takes as right and another, standard elsewhere,
+# that they hear as wrong: (the reading a take is held to, the readings refused, the margin below
+# which the take is reported). The two readings of 血 differ by one glide and score close together,
+# far inside the general margin. Of twenty takes a listener went through, the twelve scoring 3.2 or
+# less were heard as ㄒㄩㄝ (ten) or could not be told (two), and the eight from 3.7 up were not.
+SETTLED = {"血": ("ㄒㄧㄝ3", ("ㄒㄩㄝ4",), 3.5)}
 # Initials and finals most speakers in Taiwan do not keep apart.
 _MERGERS = str.maketrans({"ㄓ": "ㄗ", "ㄔ": "ㄘ", "ㄕ": "ㄙ"})
 
@@ -60,6 +66,7 @@ class Reading:
     others: tuple[tuple[str, ...], ...]  # per character, its other dictionary readings
     spoken: str = ""  # the text as it is spoken (numbers written out), punctuation included
     positions: tuple[int, ...] = ()  # where each character sits in ``spoken``
+    margins: tuple[float | None, ...] = ()  # per character, its own margin for a wrong reading, if it has one
 
 
 def load_polyphones(path: Path) -> dict[str, list[str]]:
@@ -76,11 +83,15 @@ def read(text: str, normalise: Callable[[str], str], predict: Callable[[str], Se
          polyphones: Mapping[str, Sequence[str]]) -> Reading:
     """``normalise`` writes numbers and symbols out as the synthesizer does; ``predict`` returns one
     entry per character of its input, a reading or None for what is not spoken. A reading written
-    after a character (``好[:ㄏㄠ3]``) replaces the predicted one, as it does for the synthesizer."""
+    after a character (``好[:ㄏㄠ3]``) replaces the predicted one, as it does for the synthesizer; a
+    character in ``SETTLED`` is held to its settled reading unless one is written."""
     spoken, written = _written_readings(normalise(text))
     predicted = list(predict(spoken))
     if len(predicted) != len(spoken):
         raise Unsupported(f"reading predictor returned {len(predicted)} entries for {len(spoken)} characters")
+    for position, character in enumerate(spoken):
+        if character in SETTLED and predicted[position] is not None:
+            predicted[position] = SETTLED[character][0]
     for position, reading in written.items():  # a reading written in the text is the one intended
         predicted[position] = reading
     characters, readings, positions = [], [], []
@@ -100,4 +111,8 @@ def read(text: str, normalise: Callable[[str], str], predict: Callable[[str], Se
     others = tuple(tuple(r for r in polyphones.get(c, ())
                          if r != reading and (r[:-1] == reading[:-1] or not _same_to_a_listener(c, reading, r)))
                    for c, reading in zip(characters, readings))
-    return Reading(tuple(characters), tuple(readings), others, spoken, tuple(positions))
+    held = [c in SETTLED and reading == SETTLED[c][0] for c, reading in zip(characters, readings)]
+    others = tuple(o + tuple(r for r in SETTLED[c][1] if r not in o) if h else o
+                   for c, o, h in zip(characters, others, held))
+    margins = tuple(SETTLED[c][2] if h else None for c, h in zip(characters, held))
+    return Reading(tuple(characters), tuple(readings), others, spoken, tuple(positions), margins)

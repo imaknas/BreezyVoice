@@ -71,6 +71,18 @@ def test_read_takes_a_reading_written_in_the_text_as_the_one_intended():
     assert (reading.spoken, reading.positions) == ("調大，好一。", (0, 1, 3, 4))
 
 
+def test_read_holds_a_settled_character_to_its_reading_with_its_own_margin():
+    predict = lambda text: [{"血": "ㄒㄩㄝ4", "大": "ㄉㄚ4"}.get(ch) for ch in text]
+    reading = read("血大", lambda t: t, predict, {"血": ["ㄒㄧㄝ3", "ㄒㄩㄝ4"]})
+    assert reading.readings == ("ㄒㄧㄝ3", "ㄉㄚ4")  # whatever was predicted
+    assert reading.others == (("ㄒㄩㄝ4",), ()) and reading.margins == (3.5, None)
+    # the refused reading is a rival even when the dictionary at hand does not list it
+    assert read("血", lambda t: t, predict, {}).others == (("ㄒㄩㄝ4",),)
+    # a reading written in the text is the writer's choice and is judged as any other
+    written = read("血[:ㄒㄩㄝ4]大", lambda t: t, predict, {"血": ["ㄒㄧㄝ3", "ㄒㄩㄝ4"]})
+    assert written.readings[0] == "ㄒㄩㄝ4" and written.margins == (None, None)
+
+
 def test_read_refuses_a_written_reading_that_is_not_one():
     with pytest.raises(Unsupported):
         read("調[:tiao2]大", lambda t: t, _predict, {})

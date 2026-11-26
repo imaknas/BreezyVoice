@@ -157,6 +157,33 @@ def test_reviewer_puts_the_pieces_together():
         Reviewer(recognizer, lambda text: unknown, lambda a, sr: a).review(audio, rate, "好")
 
 
+def test_reviewer_uses_the_margin_a_character_has_of_its_own():
+    """調 heard a little more like ㄊㄧㄠ2 than ㄉㄧㄠ4: inside the general margin, outside a stricter one."""
+    from types import SimpleNamespace
+
+    from breezyvoice.pronunciation.readings import Reading
+    from breezyvoice.pronunciation.review import Reviewer
+
+    def frame(**probabilities):
+        row = torch.full((len(VOCAB),), 0.01)
+        for unit, value in probabilities.items():
+            row[INDEX["<blank>" if unit == "_" else unit]] = value
+        return row
+
+    blank = frame(_=0.95)
+    frames = torch.stack([blank, frame(ㄊ=0.5, ㄉ=0.3), frame(ㄧㄠ2=0.5, ㄧㄠ4=0.3), blank]).log()
+    recognizer = SimpleNamespace(unit_index=INDEX, vocabulary=VOCAB, log_probs=lambda audio: frames)
+    audio = np.full(4 * 320, 0.1, dtype=np.float32)
+
+    def wrong(margins):
+        reading = Reading(("調",), ("ㄊㄧㄠ2",), (("ㄉㄧㄠ4",),), "調", (0,), margins)
+        return Reviewer(recognizer, lambda text: reading, lambda a, sr: a).review(audio, 16000, "調").wrong_readings
+
+    assert wrong(()) == () and wrong((None,)) == ()
+    (found,) = wrong((3.5,))
+    assert found.heard == "ㄉㄧㄠ4" and 0 < found.margin < 3.5
+
+
 def test_missing_does_not_place_a_pause_where_the_sound_never_dips():
     rate = 16000
     rng = np.random.default_rng(2)

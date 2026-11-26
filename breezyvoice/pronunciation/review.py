@@ -120,7 +120,7 @@ class Reviewer:
         wrong = tuple(
             WrongReading(reading.characters[s.index], s.index, s.reading, s.rival, s.margin)
             for s in score(log_probs, reading.readings, reading.others, index, tones=False)
-            if s.rival is not None and s.margin < self._reading_margin)
+            if s.rival is not None and s.margin < self._margin(reading, s.index))
         times = syllable_times(log_probs, reading.readings, index)
         before, after = stray_units(log_probs, times, self._recognizer.vocabulary)
         placed = tuple(place(silences(audio, sample_rate, MIN_SILENCE), times, reading.positions, reading.spoken))
@@ -132,6 +132,10 @@ class Reviewer:
         return Review(reading.characters, wrong, tuple(before), tuple(after), placed,
                       tuple(unnatural(placed, self._limits)), tuple(lacking), twice, added,
                       silence_before(audio, sample_rate), faint, tuple(times))
+
+    def _margin(self, reading: Reading, syllable: int) -> float:
+        own = reading.margins[syllable] if reading.margins else None
+        return self._reading_margin if own is None else own
 
     def tidy(self, audio: np.ndarray, sample_rate: int, review: Review) -> np.ndarray:
         """The take with its unnatural pauses shortened and its missing ones added; the speech itself

@@ -303,6 +303,11 @@ With `--checker`, every take is reviewed and the result carries a `review`:
 ```
 
 - `wrong_readings`: characters whose sounds fit another of their dictionary readings clearly better.
+  A few readings that are standard elsewhere but heard as wrong in Taiwan are held to a stricter
+  margin of their own (`SETTLED` in `pronunciation/readings.py`): 血 is ㄒㄧㄝ3, and the model says
+  ㄒㄩㄝ in about a fifth of its takes. The two score close together; on twenty takes a listener went
+  through, the margin set between them reports all ten heard as ㄒㄩㄝ and none of the eight that were
+  not. Writing the reading in the text (`血[:ㄒㄧㄝ3]`) lowered that fifth only to a sixth.
 - `extra_before` / `extra_after`: sound units heard before the sentence starts or after it ends.
 - `repeated`: syllables said twice in a row where the text has them once (就就看 for 就看), with the time
   of the extra copy. Of 39 takes synthesized from text with one character doubled it reported 30, and
