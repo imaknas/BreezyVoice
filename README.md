@@ -312,7 +312,9 @@ With `--checker`, every take is reviewed and the result carries a `review`:
   not have. Ten of 704 takes that passed the other checks had one; a listener went through eight of
   them, heard an added word at that place in five and wanted six redone. An added syllable without an
   initial (啊, 喔) is not reported: a lone final between two syllables is nearly always a vowel carried
-  over from its neighbour.
+  over from its neighbour. Such a unit beside whole added syllables does not hide them: in about 6,100
+  takes that added 12 reports, and in all 12 two speech recognisers heard added or garbled words there
+  (順便 said as 我覺得順便, a sentence ending 會退沒退 for 會退).
 - `silence_before` / `long_silence_before`: seconds before the first sound, and whether that is more
   than 1.5 s. Takes that start this late have gone wrong in other ways too; one left out its first words.
 - `unclear`: syllables the recogniser hears only faintly, as slurred, clipped or dropped syllables are.

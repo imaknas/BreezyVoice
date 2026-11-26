@@ -220,6 +220,23 @@ def test_inserted_finds_a_whole_syllable_the_text_lacks_in_mid_sentence():
     assert inserted(lp, readings, INDEX, min_probability=0.99) == []
 
 
+def test_inserted_reports_whole_syllables_beside_a_unit_that_is_not_one():
+    readings = ["ㄊㄧㄠ2", "ㄉㄚ4"]
+    # ㄉㄧㄠ4 and a stray ㄧ4 between the two syllables: the stray final does not excuse the syllable
+    lp = _frames(["ㄊ", "ㄧㄠ2", "_", "ㄉ", "ㄧㄠ4", "_", "ㄧ4", "_", "ㄉ", "ㄚ4"])
+    assert inserted(lp, readings, INDEX) == [Inserted(0, ("ㄉ", "ㄧㄠ4"), pytest.approx(3 * FRAME_SECONDS))]
+    # two extra syllables in a row are one finding; apart, two
+    lp = _frames(["ㄊ", "ㄧㄠ2", "_", "ㄉ", "ㄧㄠ4", "ㄊ", "ㄧㄠ4", "_", "ㄉ", "ㄚ4"])
+    assert [i.units for i in inserted(lp, readings, INDEX)] == [("ㄉ", "ㄧㄠ4", "ㄊ", "ㄧㄠ4")]
+    lp = _frames(["ㄊ", "ㄧㄠ2", "_", "ㄉ", "ㄧㄠ4", "_", "ㄧ4", "_", "ㄊ", "ㄧㄠ4", "_", "ㄉ", "ㄚ4"])
+    assert [i.units for i in inserted(lp, readings, INDEX)] == [("ㄉ", "ㄧㄠ4"), ("ㄊ", "ㄧㄠ4")]
+    # a faint unit inside a pair still disqualifies that pair alone
+    faint = _frames(["ㄊ", "ㄧㄠ2", "_", "ㄉ", "ㄧㄠ4", "_", "ㄊ", "ㄧㄠ4", "_", "ㄉ", "ㄚ4"])
+    faint[4] = torch.full((len(VOCAB),), 0.1).log()
+    faint[4, INDEX["ㄧㄠ4"]] = torch.tensor(0.3).log()
+    assert [i.units for i in inserted(faint, readings, INDEX)] == [("ㄊ", "ㄧㄠ4")]
+
+
 def test_clarity_is_low_for_a_syllable_that_is_not_heard():
     lp = _frames(["_", "ㄊ", "ㄧㄠ2", "_", "_", "_", "ㄉ", "ㄚ4", "_"])
     scores = clarity(lp, ["ㄊㄧㄠ2", "ㄧ1", "ㄉㄚ4"], INDEX)

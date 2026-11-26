@@ -151,10 +151,12 @@ def inserted(log_probs: torch.Tensor, readings: Sequence[str], unit_index: Mappi
     """Whole syllables heard inside the sentence that its text does not have (回神來才發現 for 回神才發現).
 
     Like ``repeated`` this reads the best path frame by frame, and it includes what ``repeated``
-    finds. Only runs made of an initial and a final count, each unit heard with at least
-    ``min_probability``: a lone final between two syllables is nearly always a vowel carried over
-    from its neighbour, and a listener hears nothing added there. Sounds before the first and after
-    the last syllable are ``stray_units``.
+    finds. Only an initial followed by a final counts, each heard with at least ``min_probability``:
+    a lone final between two syllables is nearly always a vowel carried over from its neighbour, and
+    a listener hears nothing added there. Such a unit does not excuse the syllables around it: of
+    會退沒(ㄧㄡ)退 for 會退, where the faint ㄧㄡ belongs to nothing, 退沒 is still reported. Sounds
+    before the first and after the last syllable are ``stray_units``; when the text's last syllable
+    is said again after the extra ones, as there, the extra ones lie inside and are found here.
     """
     names = {i: unit for unit, i in unit_index.items()}
     groups = [units(r) for r in readings]
@@ -167,13 +169,32 @@ def inserted(log_probs: torch.Tensor, readings: Sequence[str], unit_index: Mappi
     said = [names[i] for i, _, _ in heard]
     found = []
     for before, run in _inserted(flat, said):
-        extra = [said[j] for j in run]
-        whole = len(extra) % 2 == 0 and all((u in INITIALS) == (k % 2 == 0) for k, u in enumerate(extra))
-        if before in (0, len(flat)) or not whole or min(heard[j][2] for j in run) < min_probability:
+        if before in (0, len(flat)):
             continue
         after = sum(start < before for start in starts) - 1
-        found.append(Inserted(after, tuple(extra), heard[run[0]][1] * FRAME_SECONDS))
+        for part in _whole_syllables(run, said, [h[2] for h in heard], min_probability):
+            found.append(Inserted(after, tuple(said[j] for j in part), heard[part[0]][1] * FRAME_SECONDS))
     return found
+
+
+def _whole_syllables(run: Sequence[int], said: Sequence[str], probability: Sequence[float],
+                     min_probability: float) -> list[list[int]]:
+    """The stretches of ``run`` (consecutive positions in ``said``) that are initial-final pairs
+    heard with at least ``min_probability``, neighbouring pairs joined."""
+    parts: list[list[int]] = []
+    k = 0
+    while k + 1 < len(run):
+        a, b = run[k], run[k + 1]
+        if (said[a] in INITIALS and said[b] not in INITIALS
+                and min(probability[a], probability[b]) >= min_probability):
+            if parts and parts[-1][-1] == a - 1:
+                parts[-1] += [a, b]
+            else:
+                parts.append([a, b])
+            k += 2
+        else:
+            k += 1
+    return parts
 
 
 def clarity(log_probs: torch.Tensor, readings: Sequence[str], unit_index: Mapping[str, int]) -> list[float]:
